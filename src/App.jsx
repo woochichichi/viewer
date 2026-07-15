@@ -137,6 +137,40 @@ export default function App() {
     api.notifyReady()
   }, [addBufferFile])
 
+  // ---- 확대/축소 ----
+  const [zoom, setZoom] = useState(1)
+  const clampZoom = (z) => Math.min(3, Math.max(0.3, Math.round(z * 100) / 100))
+  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), [])
+  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), [])
+  const zoomReset = useCallback(() => setZoom(1), [])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        zoomIn()
+      } else if (e.key === '-') {
+        e.preventDefault()
+        zoomOut()
+      } else if (e.key === '0') {
+        e.preventDefault()
+        zoomReset()
+      }
+    }
+    const onWheel = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      e.preventDefault()
+      setZoom((z) => clampZoom(z + (e.deltaY < 0 ? 0.1 : -0.1)))
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', onWheel)
+    }
+  }, [zoomIn, zoomOut, zoomReset])
+
   const active = files.find((f) => f.id === activeId) || null
 
   return (
@@ -250,6 +284,7 @@ export default function App() {
                   key={active.id}
                   buffer={active.buffer}
                   name={active.name}
+                  zoom={zoom}
                 />
               )}
               {active.kind === 'xlsx' && (
@@ -257,9 +292,28 @@ export default function App() {
                   key={active.id}
                   buffer={active.buffer}
                   name={active.name}
+                  zoom={zoom}
                 />
               )}
             </Suspense>
+          )}
+
+          {active && (
+            <div className="zoom-bar">
+              <button onClick={zoomOut} title="축소 (Ctrl -)">
+                −
+              </button>
+              <button
+                className="zoom-pct"
+                onClick={zoomReset}
+                title="원래대로 (Ctrl 0)"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button onClick={zoomIn} title="확대 (Ctrl +)">
+                +
+              </button>
+            </div>
           )}
         </div>
       </main>

@@ -3,7 +3,7 @@ import { renderAsync } from 'docx-preview'
 import { exportDocxSave, editedName } from '../lib/save.js'
 
 // 보기: docx-preview(서식 충실). 편집: mammoth 로 단순 HTML 화 → 편집 → docx 저장.
-export default function DocxView({ buffer, name = 'document.docx' }) {
+export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
   const containerRef = useRef(null) // docx-preview 보기 영역
   const editRef = useRef(null) // 편집(contentEditable) 영역
   const [status, setStatus] = useState('loading') // loading | done | error
@@ -121,17 +121,50 @@ export default function DocxView({ buffer, name = 'document.docx' }) {
           {preparing ? '편집 준비 중…' : editMode ? '✏️ 편집 중' : '✏️ 편집'}
         </button>
         {editMode && (
-          <button
-            className="tool-btn primary"
-            disabled={saving}
-            onClick={handleSave}
-          >
-            {saving ? '저장 중…' : '💾 다른 이름으로 저장'}
-          </button>
+          <>
+            <button
+              className="tool-btn primary"
+              disabled={saving}
+              onClick={handleSave}
+            >
+              {saving ? '저장 중…' : '💾 다른 이름으로 저장'}
+            </button>
+            <span className="tool-sep" />
+            <button
+              className="tool-btn fmt"
+              title="굵게"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                document.execCommand('bold')
+              }}
+            >
+              <b>B</b>
+            </button>
+            <button
+              className="tool-btn fmt"
+              title="기울임"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                document.execCommand('italic')
+              }}
+            >
+              <i>I</i>
+            </button>
+            <button
+              className="tool-btn fmt"
+              title="밑줄"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                document.execCommand('underline')
+              }}
+            >
+              <u>U</u>
+            </button>
+          </>
         )}
         {editMode ? (
           <span className="tool-hint">
-            단순 서식으로 편집합니다. 저장 시 원본의 정교한 서식(글꼴·여백 등)은 일부 손실될 수 있어요.
+            텍스트를 고치고 B/I/U 로 서식. 저장 시 원본의 정교한 서식은 일부 손실될 수 있어요.
           </span>
         ) : (
           <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
@@ -151,13 +184,14 @@ export default function DocxView({ buffer, name = 'document.docx' }) {
           className="docx-host"
           style={{
             display: !editMode && status === 'done' ? 'block' : 'none',
+            zoom,
           }}
         />
 
         {/* 편집 영역 (항상 마운트, 표시만 토글하여 편집 내용 유지) */}
         <div
           className="docx-edit-page"
-          style={{ display: editMode ? 'block' : 'none' }}
+          style={{ display: editMode ? 'block' : 'none', zoom }}
         >
           <div
             ref={editRef}
