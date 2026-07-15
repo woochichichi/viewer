@@ -138,11 +138,23 @@ export default function App() {
   }, [addBufferFile])
 
   // ---- 확대/축소 ----
-  const [zoom, setZoom] = useState(1)
+  // 파일별 확대 배율 (탭마다 개별 기억)
+  const [zoomMap, setZoomMap] = useState({})
   const clampZoom = (z) => Math.min(3, Math.max(0.3, Math.round(z * 100) / 100))
-  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), [])
-  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), [])
-  const zoomReset = useCallback(() => setZoom(1), [])
+  const setActiveZoom = useCallback(
+    (v) => {
+      setZoomMap((m) => {
+        const cur = m[activeId] ?? 1
+        const next = clampZoom(typeof v === 'function' ? v(cur) : v)
+        return { ...m, [activeId]: next }
+      })
+    },
+    [activeId]
+  )
+  const zoomIn = useCallback(() => setActiveZoom((z) => z + 0.1), [setActiveZoom])
+  const zoomOut = useCallback(() => setActiveZoom((z) => z - 0.1), [setActiveZoom])
+  const zoomReset = useCallback(() => setActiveZoom(1), [setActiveZoom])
+  const zoom = zoomMap[activeId] ?? 1
 
   // ---- 찾기(Ctrl+F) ----
   const [findOpen, setFindOpen] = useState(false)
@@ -193,6 +205,36 @@ export default function App() {
       window.removeEventListener('wheel', onWheel)
     }
   }, [zoomIn, zoomOut, zoomReset, findOpen])
+
+  // ---- 최초 실행 안내(데스크톱 앱, 윈도우) ----
+  const [welcome, setWelcome] = useState(false)
+  useEffect(() => {
+    const api = window.electronAPI
+    if (api && api.platform === 'win32' && !localStorage.getItem('dv-welcomed')) {
+      setWelcome(true)
+    }
+  }, [])
+  const dismissWelcome = () => {
+    try {
+      localStorage.setItem('dv-welcomed', '1')
+    } catch {}
+    setWelcome(false)
+  }
+  const makeShortcut = async () => {
+    const r = await window.electronAPI?.createDesktopShortcut?.()
+    alert(
+      r?.ok
+        ? '바탕화면에 "문서뷰어" 바로가기를 만들었습니다.\n아이콘 우클릭 → "작업 표시줄에 고정"으로 작업표시줄에도 넣을 수 있어요.'
+        : '바로가기 생성에 실패했습니다: ' + (r?.reason || '알 수 없음')
+    )
+  }
+  const openDefaults = async () => {
+    await window.electronAPI?.openDefaultApps?.()
+    alert(
+      '윈도우 "기본 앱" 설정이 열립니다.\n' +
+        '.docx / .xlsx 항목에서 "문서뷰어"를 선택하면 기본 프로그램이 됩니다.'
+    )
+  }
 
   const active = files.find((f) => f.id === activeId) || null
 
@@ -341,6 +383,7 @@ export default function App() {
                   buffer={active.buffer}
                   name={active.name}
                   zoom={zoom}
+                  onAutoFit={setActiveZoom}
                 />
               )}
               {active.kind === 'xlsx' && (
@@ -377,6 +420,31 @@ export default function App() {
       {dragging && (
         <div className="drag-overlay">
           <div className="drag-overlay-msg">여기에 놓으세요</div>
+        </div>
+      )}
+
+      {welcome && (
+        <div className="welcome-overlay">
+          <div className="welcome-card">
+            <h2>문서뷰어 설치를 완료했어요 🎉</h2>
+            <p className="welcome-sub">
+              아래 설정을 해두면 훨씬 편하게 쓸 수 있어요. (선택)
+            </p>
+            <div className="welcome-actions">
+              <button className="wc-btn primary" onClick={makeShortcut}>
+                🖥️ 바탕화면 바로가기 만들기 <span className="rec">권장</span>
+              </button>
+              <button className="wc-btn" onClick={openDefaults}>
+                📎 docx·xlsx 기본 프로그램으로 설정 <span className="rec">권장</span>
+              </button>
+            </div>
+            <p className="welcome-tip">
+              작업 표시줄에 고정: 바탕화면 아이콘 <b>우클릭 → "작업 표시줄에 고정"</b>
+            </p>
+            <button className="wc-close" onClick={dismissWelcome}>
+              닫기
+            </button>
+          </div>
         </div>
       )}
     </div>

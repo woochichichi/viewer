@@ -3,9 +3,16 @@ import { renderAsync } from 'docx-preview'
 import { exportDocxSave, editedName } from '../lib/save.js'
 
 // 보기: docx-preview(서식 충실). 편집: mammoth 로 단순 HTML 화 → 편집 → docx 저장.
-export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
+export default function DocxView({
+  buffer,
+  name = 'document.docx',
+  zoom = 1,
+  onAutoFit,
+}) {
   const containerRef = useRef(null) // docx-preview 보기 영역
+  const scrollRef = useRef(null) // 스크롤 컨테이너
   const editRef = useRef(null) // 편집(contentEditable) 영역
+  const didFitRef = useRef(false)
   const [status, setStatus] = useState('loading') // loading | done | error
   const [error, setError] = useState('')
   const [editMode, setEditMode] = useState(false)
@@ -13,6 +20,17 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
   const [preparing, setPreparing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // A4 페이지를 창 너비에 맞춘다 (페이지 맞춤)
+  const fitToWidth = useCallback(() => {
+    const host = containerRef.current
+    const scroll = scrollRef.current
+    if (!host || !scroll) return
+    const page = host.querySelector('section.docx')
+    if (!page || !page.offsetWidth) return
+    const avail = scroll.clientWidth - 48 // 좌우 패딩
+    onAutoFit?.(avail / page.offsetWidth)
+  }, [onAutoFit])
 
   // ---- 보기: docx-preview 렌더 ----
   useEffect(() => {
@@ -29,7 +47,15 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
       experimental: true,
       useBase64URL: true,
     })
-      .then(() => !cancelled && setStatus('done'))
+      .then(() => {
+        if (cancelled) return
+        setStatus('done')
+        // A4 페이지가 창 너비에 맞게 최초 1회 자동 맞춤
+        if (!didFitRef.current) {
+          didFitRef.current = true
+          requestAnimationFrame(() => setTimeout(fitToWidth, 0))
+        }
+      })
       .catch((err) => {
         if (cancelled) return
         console.error(err)
@@ -278,11 +304,20 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
             텍스트 수정 + 서식(B/I/U·색·형광·정렬·크기). 저장 시 정교한 서식은 일부 손실될 수 있어요.
           </span>
         ) : (
-          <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
+          <>
+            <button
+              className="tool-btn"
+              onClick={fitToWidth}
+              title="A4 한 페이지를 창 너비에 맞춤"
+            >
+              ⤢ 페이지 맞춤
+            </button>
+            <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
+          </>
         )}
       </div>
 
-      <div className="docx-scroll">
+      <div className="docx-scroll" ref={scrollRef}>
         {/* 보기 영역 */}
         {!editMode && status === 'loading' && (
           <div className="state-note">문서를 렌더링하는 중…</div>

@@ -1,7 +1,7 @@
 // Electron 메인 프로세스
 // - 파일 더블클릭 시 OS 가 넘겨주는 경로(argv / open-file / second-instance)를 받아
 //   디스크에서 읽어 렌더러(React 뷰어)로 전달한다.
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -125,6 +125,34 @@ if (!gotLock) {
       return { saved: true, path: filePath }
     } catch (err) {
       return { saved: false, error: String(err && err.message ? err.message : err) }
+    }
+  })
+
+  // 바탕화면에 바로가기 만들기
+  ipcMain.handle('create-desktop-shortcut', () => {
+    try {
+      if (process.platform !== 'win32') return { ok: false, reason: 'win-only' }
+      const target = app.getPath('exe')
+      const lnk = path.join(app.getPath('desktop'), '문서뷰어.lnk')
+      const ok = shell.writeShortcutLink(lnk, 'create', {
+        target,
+        icon: target,
+        iconIndex: 0,
+        description: '로컬 문서 뷰어',
+      })
+      return { ok }
+    } catch (err) {
+      return { ok: false, reason: String(err && err.message ? err.message : err) }
+    }
+  })
+
+  // 윈도우 기본 앱 설정 화면 열기 (기본 프로그램 지정 안내)
+  ipcMain.handle('open-default-apps', async () => {
+    try {
+      await shell.openExternal('ms-settings:defaultapps')
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, reason: String(err && err.message ? err.message : err) }
     }
   })
 

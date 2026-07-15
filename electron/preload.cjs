@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 편집한 HTML → native docx 저장 (메인 프로세스에서 변환)
   exportDocx: (html, defaultName) =>
     ipcRenderer.invoke('export-docx', { html, defaultName }),
+  platform: process.platform,
+  createDesktopShortcut: () => ipcRenderer.invoke('create-desktop-shortcut'),
+  openDefaultApps: () => ipcRenderer.invoke('open-default-apps'),
 })
