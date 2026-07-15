@@ -267,6 +267,59 @@ body {
   flex-direction: column;
   background: #fff;
 }
+
+/* 편집 도구 막대 */
+.edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  background: #f7f8fa;
+  flex-shrink: 0;
+}
+.tool-btn {
+  border: 1px solid #cfd5de;
+  background: #fff;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #3a424f;
+}
+.tool-btn:hover {
+  background: #eef1f5;
+}
+.tool-btn.on {
+  background: #fff4d6;
+  border-color: #e6b800;
+  color: #7a5c00;
+  font-weight: 600;
+}
+.tool-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.tool-btn.primary:hover {
+  filter: brightness(1.07);
+}
+.tool-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.tool-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.xlsx-table td.editable {
+  outline: none;
+  cursor: text;
+}
+.xlsx-table td.editable:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: #fbfdff;
+}
 .xlsx-grid-scroll {
   flex: 1;
   overflow: auto;

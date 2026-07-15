@@ -234,7 +234,7 @@ export default function App() {
             <DocxView key={active.id} buffer={active.buffer} />
           )}
           {active && active.kind === 'xlsx' && (
-            <XlsxView key={active.id} buffer={active.buffer} />
+            <XlsxView key={active.id} buffer={active.buffer} name={active.name} />
           )}
         </div>
       </main>

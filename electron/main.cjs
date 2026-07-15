@@ -1,7 +1,7 @@
 // Electron 메인 프로세스
 // - 파일 더블클릭 시 OS 가 넘겨주는 경로(argv / open-file / second-instance)를 받아
 //   디스크에서 읽어 렌더러(React 뷰어)로 전달한다.
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -108,5 +108,23 @@ if (!gotLock) {
   ipcMain.on('renderer-ready', () => {
     rendererReady = true
     flush()
+  })
+
+  // 편집 결과 저장: 저장 위치를 물어보고 파일로 기록한다.
+  ipcMain.handle('save-file', async (_e, { defaultName, data }) => {
+    try {
+      const ext = path.extname(defaultName || '').replace('.', '') || 'xlsx'
+      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: '저장',
+        defaultPath: defaultName,
+        filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+      })
+      if (canceled || !filePath) return { saved: false }
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+      fs.writeFileSync(filePath, Buffer.from(bytes))
+      return { saved: true, path: filePath }
+    } catch (err) {
+      return { saved: false, error: String(err && err.message ? err.message : err) }
+    }
   })
 }

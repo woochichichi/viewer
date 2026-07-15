@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('open-file-error', (_e, payload) => cb(payload)),
   // 렌더러 준비 완료 알림 → 메인이 대기 중인 파일 전송
   notifyReady: () => ipcRenderer.send('renderer-ready'),
+  // 편집 결과 저장: 저장 대화상자를 띄우고 파일로 기록
+  saveFile: (defaultName, data) =>
+    ipcRenderer.invoke('save-file', { defaultName, data }),
 })
