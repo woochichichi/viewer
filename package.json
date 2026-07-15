@@ -1,0 +1,22 @@
+{
+  "name": "local-doc-viewer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "로컬 웹 뷰어 - .docx / .xlsx 파일을 업로드 없이 브라우저에서 열람 (폐쇄망 대응, CDN 미사용)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "docx-preview": "0.3.6",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "5.4.11"
+  }
+}
