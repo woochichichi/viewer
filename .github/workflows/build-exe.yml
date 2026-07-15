@@ -31,10 +31,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Build renderer (dist/)
-        run: npm run build
-
-      - name: Build app (zip)
+      - name: Build app (renderer + main + zip)
         run: npm run dist:win
 
       - name: Upload app zip
