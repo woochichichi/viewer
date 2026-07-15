@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:single": "cross-env SINGLE=1 vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,6 +18,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.3.4",
-    "vite": "5.4.11"
+    "cross-env": "^7.0.3",
+    "vite": "5.4.11",
+    "vite-plugin-singlefile": "^2.0.3"
   }
 }
