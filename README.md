@@ -15,11 +15,11 @@
 - **DOCX 렌더링** — [`docx-preview`](https://www.npmjs.com/package/docx-preview) 사용
   - 스타일 / 표 / 이미지 보존 (이미지는 data URL로 인라인 → 외부 요청 없음)
   - `mammoth`는 서식 손실이 커서 서식 보존 목적에는 `docx-preview`를 채택
-- **XLSX 렌더링** — [`SheetJS(xlsx)`](https://www.npmjs.com/package/xlsx) + 자체 HTML table
+- **XLSX 렌더링** — [`ExcelJS`](https://www.npmjs.com/package/exceljs) + 자체 HTML table
   - 시트가 여러 개면 하단 탭으로 전환
-  - 셀 병합(`!merges`) → `rowSpan` / `colSpan` 반영
-  - 열 너비(`!cols`) → `<colgroup>` 픽셀 너비로 반영
-  - **수식은 결과값으로 표시** — `cellFormula:false`로 읽고 서식값(`.w`)/원시값(`.v`)만 렌더 (수식 문자열 `=B3+B4` 노출 방지)
+  - 셀 병합 → `rowSpan` / `colSpan`, 열 너비 → `<colgroup>` 픽셀 너비 반영
+  - **셀 배경색·글꼴(굵게/색/크기)·테두리·정렬**을 읽어 엑셀과 비슷하게 렌더
+  - **수식은 결과값으로 표시**(수식 문자열 노출 방지)
 - **UI** — 좌: 파일 리스트 / 우: 렌더 영역, 상단 파일 탭
 
 ## 바로 실행 (설치 불필요) ⭐
@@ -36,7 +36,7 @@ Node.js 설치 없이 바로 쓰려면 **`release/문서뷰어.html`** 파일 �
 
 **설치 파일 받는 법 — GitHub Actions 자동 빌드**
 1. GitHub 저장소 → **Actions** 탭 → **Build Windows EXE** 최신 실행
-2. 하단 **Artifacts → `문서뷰어-Setup`** 다운로드 → 압축 풀면 **`문서뷰어-Setup-1.1.0.exe`**
+2. 하단 **Artifacts → `문서뷰어-Setup`** 다운로드 → 압축 풀면 **`문서뷰어-Setup-<버전>.exe`**
 
 **설치 & 사용**
 - 설치 파일 실행 → **설치 마법사**가 뜹니다(설치 위치 확인/선택 가능).
@@ -55,7 +55,7 @@ Node.js 설치 없이 바로 쓰려면 **`release/문서뷰어.html`** 파일 �
 - **확대/축소**: 우측 하단 `− 100% +` 버튼, 또는 **Ctrl +/−/0**, **Ctrl+마우스휠**
 
 ### 버전
-현재 **v1.2.0**. 버전은 `package.json` 의 `version` 으로 관리하며, 설치 파일명과
+현재 **v1.3.0**. 버전은 `package.json` 의 `version` 으로 관리하며, 설치 파일명과
 앱 좌측 상단에 표시됩니다. 새 버전을 내려면 `version` 을 올려서 push 하면 CI 가
 `문서뷰어-Setup-<버전>.exe` 를 새로 빌드합니다.
 
@@ -63,12 +63,12 @@ Node.js 설치 없이 바로 쓰려면 **`release/문서뷰어.html`** 파일 �
 
 우측 상단 **✏️ 편집** 버튼으로 편집 모드로 전환합니다.
 
-- **엑셀(.xlsx)**: 셀을 클릭해 값을 수정 → **💾 저장**. 값·수식·셀병합·열너비·
-  다른 시트가 유지됩니다. (무료 SheetJS 한계로 셀 색/글꼴 등 서식은 저장 시 제외)
-  → **웹(브라우저)·앱(.exe) 모두 지원**
-- **워드(.docx)**: 단순 서식으로 편집 → **💾 다른 이름으로 저장**(원본 보존).
-  제목·문단·굵게·표 등 기본 요소 위주로 저장되며, 원본의 정교한 서식(글꼴·여백
-  등)은 일부 손실될 수 있습니다.
+- **엑셀(.xlsx)**: 셀 클릭 → 값 수정 + **서식(굵게 · 글자색 · 채우기색 · 정렬)**
+  → **💾 저장**. 값·수식·셀병합·열너비·다른 시트 + **색·서식까지 모두 유지**
+  (ExcelJS 로 스타일 보존). → **웹·앱 모두 지원**
+- **워드(.docx)**: 텍스트 편집 + **서식(B/I/U · 글자색 · 형광펜 · 정렬)** →
+  **💾 다른 이름으로 저장**(원본 보존). 기본 요소(문단·굵게·표) 위주로 저장되며,
+  원본의 정교한 서식(글꼴·여백 등)은 일부 손실될 수 있습니다.
   → **앱(.exe) 에서 native docx 저장**. 웹에서는 편집은 되지만 저장은 앱 전용.
 
 > 편집은 원본을 덮어쓰지 않고 `이름-편집.xlsx` / `이름-편집.docx` 처럼 새 파일로
@@ -112,7 +112,7 @@ npm run preview # 빌드 결과 로컬 확인
 |------|-----------|
 | 앱 | Vite + React 18 |
 | DOCX | docx-preview |
-| XLSX | SheetJS (xlsx) + 자체 HTML table |
+| XLSX | ExcelJS(스타일 렌더/저장) + 자체 HTML table |
 
 ## 구조
 
@@ -123,5 +123,5 @@ src/
   styles.css        전역 스타일
   views/
     DocxView.jsx    docx-preview 렌더
-    XlsxView.jsx    SheetJS 파싱 + 병합/열너비/수식결과 렌더
+    XlsxView.jsx    ExcelJS 파싱 + 색/서식/병합/열너비 렌더·편집
 ```

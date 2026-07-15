@@ -93,6 +93,41 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
     }
   }, [editHtml])
 
+  // contentEditable 선택 영역 저장/복원 (색상 피커가 포커스를 뺏어도 유지)
+  const savedRange = useRef(null)
+  const saveSel = useCallback(() => {
+    const s = window.getSelection()
+    if (s && s.rangeCount && editRef.current?.contains(s.anchorNode)) {
+      savedRange.current = s.getRangeAt(0).cloneRange()
+    }
+  }, [])
+  // 선택 영역을 인라인 스타일 span 으로 감싼다 (html-to-docx 가 run 단위 색상 인식)
+  const wrapStyle = useCallback((prop, value) => {
+    editRef.current?.focus()
+    const sel = window.getSelection()
+    const r = savedRange.current
+    if (r) {
+      sel.removeAllRanges()
+      sel.addRange(r)
+    }
+    if (!sel.rangeCount || sel.isCollapsed) return
+    const range = sel.getRangeAt(0)
+    const span = document.createElement('span')
+    span.style[prop] = value
+    try {
+      range.surroundContents(span)
+    } catch {
+      const frag = range.extractContents()
+      span.appendChild(frag)
+      range.insertNode(span)
+    }
+    sel.removeAllRanges()
+    const nr = document.createRange()
+    nr.selectNodeContents(span)
+    sel.addRange(nr)
+    savedRange.current = nr.cloneRange()
+  }, [])
+
   const handleSave = useCallback(async () => {
     if (!editRef.current) return
     setSaving(true)
@@ -159,6 +194,59 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
               }}
             >
               <u>U</u>
+            </button>
+            <label
+              className="tool-btn fmt color-btn"
+              title="글자색"
+              onMouseDown={saveSel}
+            >
+              <span style={{ color: '#c0392b' }}>가</span>
+              <input
+                type="color"
+                onChange={(e) => wrapStyle('color', e.target.value)}
+              />
+            </label>
+            <label
+              className="tool-btn fmt color-btn"
+              title="형광펜"
+              onMouseDown={saveSel}
+            >
+              <span style={{ background: '#ffe08a', padding: '0 3px' }}>H</span>
+              <input
+                type="color"
+                onChange={(e) => wrapStyle('backgroundColor', e.target.value)}
+              />
+            </label>
+            <span className="tool-sep" />
+            <button
+              className="tool-btn fmt"
+              title="왼쪽"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                document.execCommand('justifyLeft')
+              }}
+            >
+              ⬅
+            </button>
+            <button
+              className="tool-btn fmt"
+              title="가운데"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                document.execCommand('justifyCenter')
+              }}
+            >
+              ↔
+            </button>
+            <button
+              className="tool-btn fmt"
+              title="오른쪽"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                document.execCommand('justifyRight')
+              }}
+            >
+              ➡
             </button>
           </>
         )}

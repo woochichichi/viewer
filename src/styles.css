@@ -358,6 +358,21 @@ body {
   padding: 5px 8px;
   font-size: 14px;
 }
+.tool-btn.color-btn {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tool-btn.color-btn input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
 
 /* 확대/축소 컨트롤 */
 .zoom-bar {
