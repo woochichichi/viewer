@@ -144,8 +144,31 @@ export default function App() {
   const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), [])
   const zoomReset = useCallback(() => setZoom(1), [])
 
+  // ---- 찾기(Ctrl+F) ----
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const findInputRef = useRef(null)
+  const runFind = useCallback((backwards) => {
+    const q = findInputRef.current?.value?.trim()
+    if (!q) return
+    // Electron/Chromium 의 내장 찾기 사용 (해당 위치로 스크롤 + 하이라이트)
+    const sel = window.getSelection?.()
+    if (sel) sel.collapseToStart?.()
+    window.find?.(q, false, backwards, true, false, false, false)
+  }, [])
+
   useEffect(() => {
     const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        setFindOpen(true)
+        setTimeout(() => findInputRef.current?.select(), 30)
+        return
+      }
+      if (e.key === 'Escape' && findOpen) {
+        setFindOpen(false)
+        return
+      }
       if (!(e.ctrlKey || e.metaKey)) return
       if (e.key === '=' || e.key === '+') {
         e.preventDefault()
@@ -169,7 +192,7 @@ export default function App() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('wheel', onWheel)
     }
-  }, [zoomIn, zoomOut, zoomReset])
+  }, [zoomIn, zoomOut, zoomReset, findOpen])
 
   const active = files.find((f) => f.id === activeId) || null
 
@@ -260,6 +283,34 @@ export default function App() {
         )}
 
         <div className="render-area">
+          {active && findOpen && (
+            <div className="find-bar" onKeyDown={(e) => e.stopPropagation()}>
+              <input
+                ref={findInputRef}
+                className="find-input"
+                placeholder="찾기…"
+                value={findQuery}
+                onChange={(e) => setFindQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') runFind(e.shiftKey)
+                  if (e.key === 'Escape') setFindOpen(false)
+                }}
+              />
+              <button onClick={() => runFind(true)} title="이전">
+                ↑
+              </button>
+              <button onClick={() => runFind(false)} title="다음 (Enter)">
+                ↓
+              </button>
+              <button
+                className="find-close"
+                onClick={() => setFindOpen(false)}
+                title="닫기 (Esc)"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {!active && (
             <div className="dropzone">
               <div className="dropzone-inner">
@@ -272,6 +323,11 @@ export default function App() {
                   <br />
                   지원 형식: .docx, .xlsx
                 </p>
+                <div className="dz-tips">
+                  <span>🔍 찾기 <kbd>Ctrl</kbd>+<kbd>F</kbd></span>
+                  <span>🔎 확대/축소 <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>−</kbd></span>
+                  <span>✏️ 열고 나서 편집·저장</span>
+                </div>
               </div>
             </div>
           )}

@@ -12,6 +12,7 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
   const [editHtml, setEditHtml] = useState(null) // mammoth 결과(최초 1회)
   const [preparing, setPreparing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   // ---- 보기: docx-preview 렌더 ----
   useEffect(() => {
@@ -138,6 +139,10 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
       )
       if (res && res.appOnly) alert(res.error)
       else if (res && res.error) alert('저장 실패: ' + res.error)
+      else if (res && res.saved) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 1800)
+      }
     } catch (err) {
       alert('저장 실패: ' + (err?.message || err))
     } finally {
@@ -162,7 +167,7 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
               disabled={saving}
               onClick={handleSave}
             >
-              {saving ? '저장 중…' : '💾 다른 이름으로 저장'}
+              {saving ? '저장 중…' : saved ? '✓ 저장됨' : '💾 다른 이름으로 저장'}
             </button>
             <span className="tool-sep" />
             <button
@@ -248,11 +253,29 @@ export default function DocxView({ buffer, name = 'document.docx', zoom = 1 }) {
             >
               ➡
             </button>
+            <span className="tool-sep" />
+            <select
+              className="tool-select"
+              title="글자 크기 (pt)"
+              defaultValue=""
+              onMouseDown={saveSel}
+              onChange={(e) => {
+                if (e.target.value) wrapStyle('fontSize', e.target.value + 'pt')
+                e.target.value = ''
+              }}
+            >
+              <option value="">크기</option>
+              {[10, 11, 12, 14, 16, 18, 24, 32].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
           </>
         )}
         {editMode ? (
           <span className="tool-hint">
-            텍스트를 고치고 B/I/U 로 서식. 저장 시 원본의 정교한 서식은 일부 손실될 수 있어요.
+            텍스트 수정 + 서식(B/I/U·색·형광·정렬·크기). 저장 시 정교한 서식은 일부 손실될 수 있어요.
           </span>
         ) : (
           <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
