@@ -55,12 +55,15 @@ function createWindow() {
     height: 800,
     title: '문서뷰어',
     autoHideMenuBar: true,
+    backgroundColor: '#f4f5f7', // 흰 화면 깜빡임 방지
+    show: false, // 렌더 준비되면 표시 → 빈 창 깜빡임 없이 매끄럽게
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   })
+  mainWindow.once('ready-to-show', () => mainWindow.show())
   mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
   mainWindow.on('closed', () => {
     mainWindow = null

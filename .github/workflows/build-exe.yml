@@ -34,12 +34,12 @@ jobs:
       - name: Build renderer (dist/)
         run: npm run build
 
-      - name: Build portable .exe
+      - name: Build app (zip)
         run: npm run dist:win
 
-      - name: Upload portable EXE
+      - name: Upload app zip
         uses: actions/upload-artifact@v4
         with:
-          name: 문서뷰어-portable-exe
-          path: release-exe/*.exe
+          name: 문서뷰어-win
+          path: release-exe/*.zip
           if-no-files-found: error

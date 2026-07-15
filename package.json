@@ -11,7 +11,7 @@
     "build:single": "cross-env SINGLE=1 vite build",
     "preview": "vite preview",
     "electron:dev": "electron .",
-    "dist:win": "electron-builder --win portable"
+    "dist:win": "electron-builder --win zip"
   },
   "dependencies": {
     "docx-preview": "0.3.6",
@@ -29,9 +29,10 @@
   },
   "build": {
     "appId": "com.local.docviewer",
-    "productName": "DocViewer",
+    "productName": "문서뷰어",
     "directories": {
-      "output": "release-exe"
+      "output": "release-exe",
+      "buildResources": "build"
     },
     "files": [
       "dist/**",
@@ -39,23 +40,10 @@
     ],
     "win": {
       "target": [
-        "portable"
+        "zip"
       ],
-      "fileAssociations": [
-        {
-          "ext": "docx",
-          "name": "Word 문서",
-          "role": "Viewer"
-        },
-        {
-          "ext": "xlsx",
-          "name": "Excel 통합 문서",
-          "role": "Viewer"
-        }
-      ]
-    },
-    "portable": {
-      "artifactName": "문서뷰어.exe"
+      "icon": "build/icon.ico",
+      "artifactName": "문서뷰어-win.${ext}"
     }
   }
 }
