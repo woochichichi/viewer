@@ -302,6 +302,8 @@ body {
   text-align: center;
   position: sticky;
   font-size: 11.5px;
+  /* 엑셀처럼 행/열 머리글은 복사에 딸려오지 않도록 선택 제외 */
+  user-select: none;
 }
 .xlsx-table thead th {
   position: sticky;
