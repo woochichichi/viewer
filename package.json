@@ -1,9 +1,10 @@
 {
   "name": "local-doc-viewer",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "main": "electron/main.build.cjs",
+  "author": "local-doc-viewer",
   "description": "로컬 웹 뷰어 - .docx / .xlsx 파일을 업로드 없이 브라우저에서 열람 (폐쇄망 대응, CDN 미사용)",
   "scripts": {
     "dev": "vite",
@@ -12,7 +13,7 @@
     "preview": "vite preview",
     "build:main": "esbuild electron/main.cjs --bundle --platform=node --format=cjs --external:electron --outfile=electron/main.build.cjs",
     "electron:dev": "npm run build:main && electron .",
-    "dist:win": "npm run build && npm run build:main && electron-builder --win zip"
+    "dist:win": "npm run build && npm run build:main && electron-builder --win nsis"
   },
   "dependencies": {
     "docx-preview": "0.3.6",
@@ -43,12 +44,37 @@
       "electron/main.build.cjs",
       "electron/preload.cjs"
     ],
+    "compression": "maximum",
+    "afterPack": "electron/afterPack.cjs",
+    "fileAssociations": [
+      {
+        "ext": "docx",
+        "name": "Word 문서",
+        "description": "Word 문서",
+        "icon": "build/icon.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "xlsx",
+        "name": "Excel 통합 문서",
+        "description": "Excel 통합 문서",
+        "icon": "build/icon.ico",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "target": [
-        "zip"
+        "nsis"
       ],
-      "icon": "build/icon.ico",
-      "artifactName": "문서뷰어-win.${ext}"
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "문서뷰어-Setup-${version}.${ext}"
     }
   }
 }

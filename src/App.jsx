@@ -1,6 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import DocxView from './views/DocxView.jsx'
-import XlsxView from './views/XlsxView.jsx'
+import React, {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+
+// 필요한 뷰어만 지연 로딩 → 초기 로딩/실행 속도 개선
+const DocxView = lazy(() => import('./views/DocxView.jsx'))
+const XlsxView = lazy(() => import('./views/XlsxView.jsx'))
 
 const ACCEPT = ['.docx', '.xlsx']
 
@@ -146,7 +155,9 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-head">
           <h1>문서 뷰어</h1>
-          <p className="hint">.docx · .xlsx · 오프라인</p>
+          <p className="hint">
+            v{__APP_VERSION__} · .docx · .xlsx · 오프라인
+          </p>
         </div>
 
         <button className="pick-btn" onClick={() => inputRef.current?.click()}>
@@ -230,11 +241,25 @@ export default function App() {
               </div>
             </div>
           )}
-          {active && active.kind === 'docx' && (
-            <DocxView key={active.id} buffer={active.buffer} name={active.name} />
-          )}
-          {active && active.kind === 'xlsx' && (
-            <XlsxView key={active.id} buffer={active.buffer} name={active.name} />
+          {active && (
+            <Suspense
+              fallback={<div className="state-note">여는 중…</div>}
+            >
+              {active.kind === 'docx' && (
+                <DocxView
+                  key={active.id}
+                  buffer={active.buffer}
+                  name={active.name}
+                />
+              )}
+              {active.kind === 'xlsx' && (
+                <XlsxView
+                  key={active.id}
+                  buffer={active.buffer}
+                  name={active.name}
+                />
+              )}
+            </Suspense>
           )}
         </div>
       </main>

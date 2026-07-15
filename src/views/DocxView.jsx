@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { renderAsync } from 'docx-preview'
-import mammoth from 'mammoth/mammoth.browser.js'
 import { exportDocxSave, editedName } from '../lib/save.js'
 
 // 보기: docx-preview(서식 충실). 편집: mammoth 로 단순 HTML 화 → 편집 → docx 저장.
@@ -71,6 +70,8 @@ export default function DocxView({ buffer, name = 'document.docx' }) {
     if (editHtml == null) {
       setPreparing(true)
       try {
+        // mammoth 는 편집 진입 시에만 지연 로딩 (보기 속도에 영향 없음)
+        const mammoth = (await import('mammoth/mammoth.browser.js')).default
         const { value } = await mammoth.convertToHtml({ arrayBuffer: buffer })
         setEditHtml(value && value.trim() ? value : '<p></p>')
       } catch (err) {
