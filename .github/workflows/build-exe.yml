@@ -1,0 +1,45 @@
+name: Build Windows EXE
+
+# 윈도우용 포터블 .exe 를 GitHub 의 윈도우 서버에서 자동 빌드한다.
+# - 수동 실행: Actions 탭에서 "Run workflow"
+# - 브랜치에 푸시될 때도 자동 실행
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/local-doc-viewer-5o6qvl
+    paths:
+      - 'src/**'
+      - 'electron/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package.json'
+      - '.github/workflows/build-exe.yml'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build renderer (dist/)
+        run: npm run build
+
+      - name: Build portable .exe
+        run: npm run dist:win
+
+      - name: Upload portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: 문서뷰어-portable-exe
+          path: release-exe/*.exe
+          if-no-files-found: error

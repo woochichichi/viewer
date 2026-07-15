@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import DocxView from './views/DocxView.jsx'
 import XlsxView from './views/XlsxView.jsx'
 
@@ -61,6 +61,21 @@ export default function App() {
     }
   }, [])
 
+  // 이미 로드된 ArrayBuffer 로 파일 하나를 추가 (Electron 파일연결 열기용)
+  const addBufferFile = useCallback((name, buffer, size) => {
+    const kind = kindOf(name)
+    if (!kind) return
+    const item = {
+      id: ++idSeq,
+      name,
+      kind,
+      size: size ?? buffer.byteLength,
+      buffer,
+    }
+    setFiles((prev) => [...prev, item])
+    setActiveId(item.id)
+  }, [])
+
   const onDrop = useCallback(
     (e) => {
       e.preventDefault()
@@ -95,6 +110,23 @@ export default function App() {
     },
     []
   )
+
+  // Electron 데스크톱 앱: 파일 더블클릭(파일연결)으로 열리면 메인 프로세스가
+  // 파일을 읽어 여기로 밀어준다. 브라우저에서는 electronAPI 가 없어 무시된다.
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api) return
+    api.onOpenFile(({ name, data }) => {
+      const u8 = data instanceof Uint8Array ? data : new Uint8Array(data)
+      // 정확한 크기의 독립 ArrayBuffer 확보
+      const buffer = u8.slice().buffer
+      addBufferFile(name, buffer)
+    })
+    api.onOpenFileError?.(({ name, message }) => {
+      alert(`파일을 열 수 없습니다: ${name}\n${message}`)
+    })
+    api.notifyReady()
+  }, [addBufferFile])
 
   const active = files.find((f) => f.id === activeId) || null
 

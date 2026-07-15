@@ -3,12 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "description": "로컬 웹 뷰어 - .docx / .xlsx 파일을 업로드 없이 브라우저에서 열람 (폐쇄망 대응, CDN 미사용)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:single": "cross-env SINGLE=1 vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "electron .",
+    "dist:win": "electron-builder --win portable"
   },
   "dependencies": {
     "docx-preview": "0.3.6",
@@ -19,7 +22,40 @@
   "devDependencies": {
     "@vitejs/plugin-react": "4.3.4",
     "cross-env": "^7.0.3",
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
     "vite": "5.4.11",
     "vite-plugin-singlefile": "^2.0.3"
+  },
+  "build": {
+    "appId": "com.local.docviewer",
+    "productName": "DocViewer",
+    "directories": {
+      "output": "release-exe"
+    },
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "fileAssociations": [
+        {
+          "ext": "docx",
+          "name": "Word 문서",
+          "role": "Viewer"
+        },
+        {
+          "ext": "xlsx",
+          "name": "Excel 통합 문서",
+          "role": "Viewer"
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "문서뷰어.exe"
+    }
   }
 }
