@@ -239,10 +239,45 @@ body {
 }
 
 /* ---------- DOCX ---------- */
-.docx-scroll {
+.docx-outer {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.docx-scroll {
+  flex: 1;
   overflow: auto;
   padding: 24px;
+}
+/* 편집 영역: 문서 같은 흰 페이지 */
+.docx-edit-page {
+  display: flex;
+  justify-content: center;
+}
+.docx-edit {
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
+  width: 800px;
+  max-width: 100%;
+  min-height: 400px;
+  padding: 56px 64px;
+  outline: none;
+  line-height: 1.6;
+  color: #222;
+}
+.docx-edit:focus {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14), 0 0 0 2px var(--accent);
+}
+.docx-edit p {
+  margin: 0 0 10px;
+}
+.docx-edit table {
+  border-collapse: collapse;
+}
+.docx-edit td,
+.docx-edit th {
+  border: 1px solid #b9c0cc;
+  padding: 4px 8px;
 }
 .docx-host {
   display: flex;

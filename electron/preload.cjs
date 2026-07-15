@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 편집 결과 저장: 저장 대화상자를 띄우고 파일로 기록
   saveFile: (defaultName, data) =>
     ipcRenderer.invoke('save-file', { defaultName, data }),
+  // 편집한 HTML → native docx 저장 (메인 프로세스에서 변환)
+  exportDocx: (html, defaultName) =>
+    ipcRenderer.invoke('export-docx', { html, defaultName }),
 })

@@ -231,7 +231,7 @@ export default function App() {
             </div>
           )}
           {active && active.kind === 'docx' && (
-            <DocxView key={active.id} buffer={active.buffer} />
+            <DocxView key={active.id} buffer={active.buffer} name={active.name} />
           )}
           {active && active.kind === 'xlsx' && (
             <XlsxView key={active.id} buffer={active.buffer} name={active.name} />

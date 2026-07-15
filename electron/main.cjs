@@ -127,4 +127,24 @@ if (!gotLock) {
       return { saved: false, error: String(err && err.message ? err.message : err) }
     }
   })
+
+  // 편집한 HTML → native docx 로 변환해 저장 (Node 환경에서 html-to-docx 실행)
+  ipcMain.handle('export-docx', async (_e, { html, defaultName }) => {
+    try {
+      const HTMLtoDOCX = require('html-to-docx')
+      const buf = await HTMLtoDOCX(html, null, {
+        table: { row: { cantSplit: true } },
+      })
+      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: '저장',
+        defaultPath: defaultName,
+        filters: [{ name: 'Word 문서', extensions: ['docx'] }],
+      })
+      if (canceled || !filePath) return { saved: false }
+      fs.writeFileSync(filePath, Buffer.from(buf))
+      return { saved: true, path: filePath }
+    } catch (err) {
+      return { saved: false, error: String(err && err.message ? err.message : err) }
+    }
+  })
 }

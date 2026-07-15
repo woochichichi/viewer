@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "docx-preview": "0.3.6",
+    "html-to-docx": "^1.8.0",
+    "mammoth": "^1.8.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "xlsx": "0.18.5"

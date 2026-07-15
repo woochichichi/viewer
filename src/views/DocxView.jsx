@@ -1,13 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { renderAsync } from 'docx-preview'
+import mammoth from 'mammoth/mammoth.browser.js'
+import { exportDocxSave, editedName } from '../lib/save.js'
 
-// docx-preview: 스타일 / 표 / 이미지 보존.
-// (mammoth 는 서식 손실이 커서 서식 보존 목적엔 docx-preview 사용)
-export default function DocxView({ buffer }) {
-  const containerRef = useRef(null)
+// 보기: docx-preview(서식 충실). 편집: mammoth 로 단순 HTML 화 → 편집 → docx 저장.
+export default function DocxView({ buffer, name = 'document.docx' }) {
+  const containerRef = useRef(null) // docx-preview 보기 영역
+  const editRef = useRef(null) // 편집(contentEditable) 영역
   const [status, setStatus] = useState('loading') // loading | done | error
   const [error, setError] = useState('')
+  const [editMode, setEditMode] = useState(false)
+  const [editHtml, setEditHtml] = useState(null) // mammoth 결과(최초 1회)
+  const [preparing, setPreparing] = useState(false)
+  const [saving, setSaving] = useState(false)
 
+  // ---- 보기: docx-preview 렌더 ----
   useEffect(() => {
     let cancelled = false
     const el = containerRef.current
@@ -15,35 +22,26 @@ export default function DocxView({ buffer }) {
     el.innerHTML = ''
     setStatus('loading')
     setError('')
-
-    // renderAsync 는 ArrayBuffer / Blob / Uint8Array 를 받는다.
     renderAsync(buffer, el, undefined, {
       className: 'docx',
       inWrapper: true,
-      ignoreWidth: false,
-      ignoreHeight: false,
       breakPages: true,
       experimental: true,
-      useBase64URL: true, // 이미지를 data URL 로 인라인 → 외부 요청 없음
+      useBase64URL: true,
     })
-      .then(() => {
-        if (!cancelled) setStatus('done')
-      })
+      .then(() => !cancelled && setStatus('done'))
       .catch((err) => {
         if (cancelled) return
         console.error(err)
         setError(err?.message || String(err))
         setStatus('error')
       })
-
     return () => {
       cancelled = true
     }
   }, [buffer])
 
-  // 복사 시 문단(블록)마다 빈 줄이 하나씩 끼는 문제 보정.
-  // 선택 영역이 문서 안일 때, 붙여넣기용 평문에서 연속 개행을 한 줄로 정리한다.
-  // (서식 붙여넣기를 위해 HTML 은 원본 그대로 유지)
+  // ---- 복사 시 문단마다 빈 줄 끼는 문제 보정 (보기 영역) ----
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -51,13 +49,11 @@ export default function DocxView({ buffer }) {
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return
       if (!el.contains(sel.anchorNode) && !el.contains(sel.focusNode)) return
-      // 평문: 빈 줄(연속 개행)을 한 줄로, 각 줄 끝 공백 정리
       const text = sel
         .toString()
         .replace(/[ \t]+\n/g, '\n')
         .replace(/\n{2,}/g, '\n')
         .trim()
-      // HTML: 선택 영역 원본 보존 (Word 등에 서식 유지 붙여넣기)
       const frag = document.createElement('div')
       for (let i = 0; i < sel.rangeCount; i++) {
         frag.appendChild(sel.getRangeAt(i).cloneContents())
@@ -70,21 +66,106 @@ export default function DocxView({ buffer }) {
     return () => el.removeEventListener('copy', onCopy)
   }, [])
 
+  // ---- 편집 진입: mammoth 로 편집용 HTML 준비(최초 1회) ----
+  const enterEdit = useCallback(async () => {
+    if (editHtml == null) {
+      setPreparing(true)
+      try {
+        const { value } = await mammoth.convertToHtml({ arrayBuffer: buffer })
+        setEditHtml(value && value.trim() ? value : '<p></p>')
+      } catch (err) {
+        console.error(err)
+        setEditHtml('<p></p>')
+        alert('편집용 변환 중 문제가 발생했습니다: ' + (err?.message || err))
+      } finally {
+        setPreparing(false)
+      }
+    }
+    setEditMode(true)
+  }, [buffer, editHtml])
+
+  // 편집 HTML 이 준비되면 contentEditable 에 한 번 주입(이후 편집 내용 보존)
+  useEffect(() => {
+    if (editHtml != null && editRef.current && !editRef.current.dataset.filled) {
+      editRef.current.innerHTML = editHtml
+      editRef.current.dataset.filled = '1'
+    }
+  }, [editHtml])
+
+  const handleSave = useCallback(async () => {
+    if (!editRef.current) return
+    setSaving(true)
+    try {
+      const res = await exportDocxSave(
+        editedName(name),
+        editRef.current.innerHTML
+      )
+      if (res && res.appOnly) alert(res.error)
+      else if (res && res.error) alert('저장 실패: ' + res.error)
+    } catch (err) {
+      alert('저장 실패: ' + (err?.message || err))
+    } finally {
+      setSaving(false)
+    }
+  }, [name])
+
   return (
-    <div className="docx-scroll">
-      {status === 'loading' && (
-        <div className="state-note">문서를 렌더링하는 중…</div>
-      )}
-      {status === 'error' && (
-        <div className="state-note error">
-          문서를 열 수 없습니다: {error}
+    <div className="docx-outer">
+      <div className="edit-toolbar">
+        <button
+          className={'tool-btn' + (editMode ? ' on' : '')}
+          disabled={preparing}
+          onClick={() => (editMode ? setEditMode(false) : enterEdit())}
+        >
+          {preparing ? '편집 준비 중…' : editMode ? '✏️ 편집 중' : '✏️ 편집'}
+        </button>
+        {editMode && (
+          <button
+            className="tool-btn primary"
+            disabled={saving}
+            onClick={handleSave}
+          >
+            {saving ? '저장 중…' : '💾 다른 이름으로 저장'}
+          </button>
+        )}
+        {editMode ? (
+          <span className="tool-hint">
+            단순 서식으로 편집합니다. 저장 시 원본의 정교한 서식(글꼴·여백 등)은 일부 손실될 수 있어요.
+          </span>
+        ) : (
+          <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
+        )}
+      </div>
+
+      <div className="docx-scroll">
+        {/* 보기 영역 */}
+        {!editMode && status === 'loading' && (
+          <div className="state-note">문서를 렌더링하는 중…</div>
+        )}
+        {!editMode && status === 'error' && (
+          <div className="state-note error">문서를 열 수 없습니다: {error}</div>
+        )}
+        <div
+          ref={containerRef}
+          className="docx-host"
+          style={{
+            display: !editMode && status === 'done' ? 'block' : 'none',
+          }}
+        />
+
+        {/* 편집 영역 (항상 마운트, 표시만 토글하여 편집 내용 유지) */}
+        <div
+          className="docx-edit-page"
+          style={{ display: editMode ? 'block' : 'none' }}
+        >
+          <div
+            ref={editRef}
+            className="docx-edit"
+            contentEditable
+            suppressContentEditableWarning
+          />
         </div>
-      )}
-      <div
-        ref={containerRef}
-        className="docx-host"
-        style={{ display: status === 'done' ? 'block' : 'none' }}
-      />
+      </div>
     </div>
   )
 }
