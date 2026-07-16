@@ -11,7 +11,7 @@ import React, {
 const DocxView = lazy(() => import('./views/DocxView.jsx'))
 const XlsxView = lazy(() => import('./views/XlsxView.jsx'))
 
-const ACCEPT = ['.docx', '.xlsx']
+const ACCEPT = ['.docx', '.xlsx', '.xls', '.csv']
 
 function extOf(name) {
   const i = name.lastIndexOf('.')
@@ -22,8 +22,13 @@ function kindOf(name) {
   const e = extOf(name)
   if (e === '.docx') return 'docx'
   if (e === '.xlsx') return 'xlsx'
+  if (e === '.xls') return 'xls'
+  if (e === '.csv') return 'csv'
   return null
 }
+
+// 스프레드시트 계열(엑셀 뷰어로 렌더)
+const isSheet = (kind) => kind === 'xlsx' || kind === 'xls' || kind === 'csv'
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`
@@ -60,7 +65,7 @@ export default function App() {
     }
     if (rejected.length) {
       alert(
-        `지원하지 않는 파일은 제외했습니다 (.docx / .xlsx 만 가능):\n` +
+        `지원하지 않는 파일은 제외했습니다 (.docx / .xlsx / .xls / .csv 만 가능):\n` +
           rejected.join('\n')
       )
     }
@@ -196,7 +201,7 @@ export default function App() {
     const onWheel = (e) => {
       if (!(e.ctrlKey || e.metaKey)) return
       e.preventDefault()
-      setZoom((z) => clampZoom(z + (e.deltaY < 0 ? 0.1 : -0.1)))
+      setActiveZoom((z) => z + (e.deltaY < 0 ? 0.1 : -0.1))
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: false })
@@ -255,7 +260,7 @@ export default function App() {
         <div className="sidebar-head">
           <h1>문서 뷰어</h1>
           <p className="hint">
-            v{__APP_VERSION__} · .docx · .xlsx · 오프라인
+            v{__APP_VERSION__} · docx·xlsx·xls·csv · 오프라인
           </p>
         </div>
 
@@ -363,7 +368,7 @@ export default function App() {
                 <p className="dz-sub">
                   또는 좌측의 <b>파일 열기</b> 버튼을 사용하세요
                   <br />
-                  지원 형식: .docx, .xlsx
+                  지원 형식: .docx, .xlsx, .xls, .csv
                 </p>
                 <div className="dz-tips">
                   <span>🔍 찾기 <kbd>Ctrl</kbd>+<kbd>F</kbd></span>
@@ -386,11 +391,12 @@ export default function App() {
                   onAutoFit={setActiveZoom}
                 />
               )}
-              {active.kind === 'xlsx' && (
+              {isSheet(active.kind) && (
                 <XlsxView
                   key={active.id}
                   buffer={active.buffer}
                   name={active.name}
+                  kind={active.kind}
                   zoom={zoom}
                 />
               )}

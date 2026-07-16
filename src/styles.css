@@ -137,6 +137,12 @@ body {
 .badge-xlsx {
   background: var(--xlsx-badge);
 }
+.badge-xls {
+  background: #3f7d4e;
+}
+.badge-csv {
+  background: #7a7f45;
+}
 
 .close-x {
   background: transparent;

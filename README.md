@@ -10,8 +10,11 @@
 
 - **파일 입력**
   - 드래그 앤 드롭 + 파일 선택 버튼
-  - `.docx` `.xlsx` 확장자 필터 (그 외 파일은 자동 제외)
+  - `.docx` `.xlsx` `.xls` `.csv` 확장자 필터 (그 외 파일은 자동 제외)
   - 여러 파일을 상단 탭 + 좌측 리스트로 동시에 열기
+- **.xls / .csv 지원** — 구형 엑셀(.xls)·CSV 를 SheetJS 로 읽어 내부적으로 xlsx 로
+  변환해 엑셀 뷰어로 렌더/편집. CSV 는 UTF-8/EUC-KR(한글) 인코딩 자동 감지.
+  편집 저장은 `.xlsx` 로 저장(서식 보존).
 - **DOCX 렌더링** — [`docx-preview`](https://www.npmjs.com/package/docx-preview) 사용
   - 스타일 / 표 / 이미지 보존 (이미지는 data URL로 인라인 → 외부 요청 없음)
   - `mammoth`는 서식 손실이 커서 서식 보존 목적에는 `docx-preview`를 채택
@@ -72,7 +75,7 @@ Node.js 설치 없이 바로 쓰려면 **`release/문서뷰어.html`** 파일 �
 - **찾기**: **Ctrl+F** (Enter=다음, Shift+Enter=이전, Esc=닫기)
 
 ### 버전
-현재 **v1.5.0**. 버전은 `package.json` 의 `version` 으로 관리하며, 설치 파일명과
+현재 **v1.6.0**. 버전은 `package.json` 의 `version` 으로 관리하며, 설치 파일명과
 앱 좌측 상단에 표시됩니다. 새 버전을 내려면 `version` 을 올려서 push 하면 CI 가
 `문서뷰어-Setup-<버전>.exe` 를 새로 빌드합니다.
 

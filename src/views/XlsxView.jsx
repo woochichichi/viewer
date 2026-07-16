@@ -138,9 +138,33 @@ function sheetsFromWorkbook(wb) {
   })
 }
 
-async function buildModel(buffer) {
+// CSV 바이트 → 문자열 (UTF-8 우선, 깨지면 한글 EUC-KR 로 재시도)
+function decodeCsv(buffer) {
+  const bytes = new Uint8Array(buffer)
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf)
+    return new TextDecoder('utf-8').decode(bytes)
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+  if (!utf8.includes('�')) return utf8
+  try {
+    return new TextDecoder('euc-kr').decode(bytes)
+  } catch {
+    return utf8
+  }
+}
+
+async function buildModel(buffer, kind) {
+  let xlsxBuf = buffer
+  // .xls(구형 바이너리) / .csv → SheetJS 로 읽어 xlsx 로 변환(지연 로딩)
+  if (kind === 'xls' || kind === 'csv') {
+    const XLSX = await import('xlsx')
+    const wbS =
+      kind === 'csv'
+        ? XLSX.read(decodeCsv(buffer), { type: 'string' })
+        : XLSX.read(new Uint8Array(buffer), { type: 'array' })
+    xlsxBuf = XLSX.write(wbS, { type: 'array', bookType: 'xlsx' })
+  }
   const wb = new ExcelJS.Workbook()
-  await wb.xlsx.load(buffer)
+  await wb.xlsx.load(xlsxBuf)
   return { wb, sheets: sheetsFromWorkbook(wb) }
 }
 
@@ -156,7 +180,12 @@ const toArgb = (hex) => 'FF' + hex.replace('#', '').slice(-6).toUpperCase()
 
 const FONT_SIZES = [10, 11, 12, 14, 16, 18, 24, 32]
 
-export default function XlsxView({ buffer, name = 'sheet.xlsx', zoom = 1 }) {
+export default function XlsxView({
+  buffer,
+  name = 'sheet.xlsx',
+  kind = 'xlsx',
+  zoom = 1,
+}) {
   const [model, setModel] = useState(null)
   const [activeSheet, setActiveSheet] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -177,7 +206,7 @@ export default function XlsxView({ buffer, name = 'sheet.xlsx', zoom = 1 }) {
     selRef.current = null
     rangeRef.current = null
     setDirty(false)
-    buildModel(buffer)
+    buildModel(buffer, kind)
       .then((m) => !cancelled && setModel({ data: m }))
       .catch((e) => {
         console.error(e)
@@ -186,7 +215,7 @@ export default function XlsxView({ buffer, name = 'sheet.xlsx', zoom = 1 }) {
     return () => {
       cancelled = true
     }
-  }, [buffer])
+  }, [buffer, kind])
 
   const tdAt = (r, c) =>
     gridRef.current?.querySelector(`td[data-r="${r}"][data-c="${c}"]`)
@@ -280,7 +309,11 @@ export default function XlsxView({ buffer, name = 'sheet.xlsx', zoom = 1 }) {
       const wb = model.data.wb
       flushToWb(wb)
       const out = await wb.xlsx.writeBuffer()
-      const res = await saveBytes(editedName(name), new Uint8Array(out))
+      // xls/csv 로 연 파일도 편집 저장은 xlsx 로 (서식 보존)
+      const outName = /\.(xls|csv)$/i.test(name)
+        ? name.replace(/\.[^.]+$/, '') + '-편집.xlsx'
+        : editedName(name)
+      const res = await saveBytes(outName, new Uint8Array(out))
       if (res.saved) {
         setDirty(false)
         setSaved(true)
