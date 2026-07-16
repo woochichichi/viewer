@@ -42,7 +42,8 @@ npm run dist:win       # 윈도우 설치 파일(release-exe/) — 윈도우에�
 1. `package.json` 의 `version` 을 올린다 (예: 1.1.0 → 1.2.0)
 2. 커밋 & `claude/local-doc-viewer-5o6qvl` 브랜치에 push
 3. GitHub **Actions → Build Windows EXE** 가 자동 실행
-4. 완료 후 **Artifacts → 문서뷰어-Setup** 다운로드 → `문서뷰어-Setup-<버전>.exe`
+4. 완료 후 **Releases** 에 `v<버전>` 자동 생성 + 설치 파일 첨부(상시 링크).
+   (Actions 의 Artifacts 로도 받을 수 있음 — 90일 보관)
 
 > 버전은 설치 파일명과 앱 좌측 상단(`__APP_VERSION__`, vite define)에 표시된다.
 

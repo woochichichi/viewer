@@ -19,6 +19,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write # Release 생성/업로드 권한
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,9 +36,35 @@ jobs:
       - name: Build installer (renderer + main + nsis)
         run: npm run dist:win
 
-      - name: Upload installer
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      # 아티팩트(개발/테스트용, 90일 보관)
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: 문서뷰어-Setup
           path: release-exe/*.exe
           if-no-files-found: error
+
+      # Release(상시 다운로드 링크). package.json 버전으로 v태그 생성/갱신.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: 문서뷰어 v${{ steps.ver.outputs.version }}
+          body: |
+            윈도우 설치 파일입니다. 아래 **문서뷰어-Setup-${{ steps.ver.outputs.version }}.exe** 를 받아 설치하세요.
+
+            - 관리자 권한 없이 내 계정에 설치, docx/xlsx 파일연결·아이콘 자동 등록
+            - 서명되지 않은 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"
+          files: |
+            release-exe/*.exe
+            release-exe/*.blockmap
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
