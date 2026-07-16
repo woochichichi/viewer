@@ -15,7 +15,7 @@ function pickDocPaths(argv) {
   return (argv || []).filter(
     (a) =>
       typeof a === 'string' &&
-      /\.(docx|xlsx|xls|csv)$/i.test(a) &&
+      /\.(docx|xlsx|xls|csv|txt|log|md|ini|bat)$/i.test(a) &&
       fs.existsSync(a) &&
       fs.statSync(a).isFile()
   )

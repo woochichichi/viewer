@@ -10,8 +10,10 @@ import React, {
 // 필요한 뷰어만 지연 로딩 → 초기 로딩/실행 속도 개선
 const DocxView = lazy(() => import('./views/DocxView.jsx'))
 const XlsxView = lazy(() => import('./views/XlsxView.jsx'))
+const TextView = lazy(() => import('./views/TextView.jsx'))
 
-const ACCEPT = ['.docx', '.xlsx', '.xls', '.csv']
+const TEXT_EXTS = ['txt', 'log', 'md', 'ini', 'bat']
+const ACCEPT = ['.docx', '.xlsx', '.xls', '.csv', ...TEXT_EXTS.map((e) => '.' + e)]
 
 function extOf(name) {
   const i = name.lastIndexOf('.')
@@ -19,16 +21,18 @@ function extOf(name) {
 }
 
 function kindOf(name) {
-  const e = extOf(name)
-  if (e === '.docx') return 'docx'
-  if (e === '.xlsx') return 'xlsx'
-  if (e === '.xls') return 'xls'
-  if (e === '.csv') return 'csv'
+  const e = extOf(name).slice(1)
+  if (e === 'docx') return 'docx'
+  if (e === 'xlsx') return 'xlsx'
+  if (e === 'xls') return 'xls'
+  if (e === 'csv') return 'csv'
+  if (TEXT_EXTS.includes(e)) return e
   return null
 }
 
 // 스프레드시트 계열(엑셀 뷰어로 렌더)
 const isSheet = (kind) => kind === 'xlsx' || kind === 'xls' || kind === 'csv'
+const isText = (kind) => TEXT_EXTS.includes(kind)
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`
@@ -65,7 +69,7 @@ export default function App() {
     }
     if (rejected.length) {
       alert(
-        `지원하지 않는 파일은 제외했습니다 (.docx / .xlsx / .xls / .csv 만 가능):\n` +
+        `지원하지 않는 파일은 제외했습니다 (docx·xlsx·xls·csv·txt·log·md·ini·bat):\n` +
           rejected.join('\n')
       )
     }
@@ -211,6 +215,61 @@ export default function App() {
     }
   }, [zoomIn, zoomOut, zoomReset, findOpen])
 
+  // ---- 우클릭 컨텍스트 메뉴 ----
+  const [ctx, setCtx] = useState(null) // { x, y, text }
+  const onContextMenu = useCallback((e) => {
+    const sel = window.getSelection?.()
+    const text = sel && !sel.isCollapsed ? sel.toString().trim() : ''
+    e.preventDefault()
+    const x = Math.min(e.clientX, window.innerWidth - 210)
+    const y = Math.min(e.clientY, window.innerHeight - 160)
+    setCtx({ x, y, text })
+  }, [])
+  useEffect(() => {
+    if (!ctx) return
+    const close = () => setCtx(null)
+    const onEsc = (e) => e.key === 'Escape' && setCtx(null)
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('keydown', onEsc)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('keydown', onEsc)
+    }
+  }, [ctx])
+  const ctxCopy = () => {
+    document.execCommand('copy') // 선택 영역 복사 (docx 개행 보정 핸들러도 적용됨)
+    setCtx(null)
+  }
+  const ctxSelectAll = () => {
+    const el =
+      document.querySelector('.render-area .docx-host') ||
+      document.querySelector('.render-area .docx-edit') ||
+      document.querySelector('.render-area .xlsx-table')
+    if (el) {
+      const r = document.createRange()
+      r.selectNodeContents(el)
+      const s = window.getSelection()
+      s.removeAllRanges()
+      s.addRange(r)
+    }
+    setCtx(null)
+  }
+  const ctxFind = () => {
+    const t = ctx?.text || ''
+    setCtx(null)
+    setFindQuery(t)
+    setFindOpen(true)
+    setTimeout(() => {
+      if (findInputRef.current) {
+        findInputRef.current.value = t
+        findInputRef.current.focus()
+      }
+      runFind(false)
+    }, 40)
+  }
+
   // ---- 최초 실행 안내(데스크톱 앱, 윈도우) ----
   const [welcome, setWelcome] = useState(false)
   useEffect(() => {
@@ -260,7 +319,7 @@ export default function App() {
         <div className="sidebar-head">
           <h1>문서 뷰어</h1>
           <p className="hint">
-            v{__APP_VERSION__} · docx·xlsx·xls·csv · 오프라인
+            v{__APP_VERSION__} · 문서·표·텍스트 · 오프라인
           </p>
         </div>
 
@@ -329,7 +388,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="render-area">
+        <div className="render-area" onContextMenu={onContextMenu}>
           {active && findOpen && (
             <div className="find-bar" onKeyDown={(e) => e.stopPropagation()}>
               <input
@@ -368,7 +427,7 @@ export default function App() {
                 <p className="dz-sub">
                   또는 좌측의 <b>파일 열기</b> 버튼을 사용하세요
                   <br />
-                  지원 형식: .docx, .xlsx, .xls, .csv
+                  지원 형식: docx · xlsx · xls · csv · txt · log · md · ini · bat
                 </p>
                 <div className="dz-tips">
                   <span>🔍 찾기 <kbd>Ctrl</kbd>+<kbd>F</kbd></span>
@@ -393,6 +452,15 @@ export default function App() {
               )}
               {isSheet(active.kind) && (
                 <XlsxView
+                  key={active.id}
+                  buffer={active.buffer}
+                  name={active.name}
+                  kind={active.kind}
+                  zoom={zoom}
+                />
+              )}
+              {isText(active.kind) && (
+                <TextView
                   key={active.id}
                   buffer={active.buffer}
                   name={active.name}
@@ -426,6 +494,33 @@ export default function App() {
       {dragging && (
         <div className="drag-overlay">
           <div className="drag-overlay-msg">여기에 놓으세요</div>
+        </div>
+      )}
+
+      {ctx && (
+        <div
+          className="ctx-menu"
+          style={{ left: ctx.x, top: ctx.y }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button className="ctx-item" disabled={!ctx.text} onClick={ctxCopy}>
+            <span>복사</span>
+            <span className="ctx-key">Ctrl+C</span>
+          </button>
+          <button className="ctx-item" disabled={!ctx.text} onClick={ctxFind}>
+            <span>
+              {ctx.text
+                ? `"${ctx.text.slice(0, 12)}${ctx.text.length > 12 ? '…' : ''}" 찾기`
+                : '찾기'}
+            </span>
+            <span className="ctx-key">Ctrl+F</span>
+          </button>
+          <div className="ctx-sep" />
+          <button className="ctx-item" onClick={ctxSelectAll}>
+            <span>전체 선택</span>
+            <span className="ctx-key">Ctrl+A</span>
+          </button>
         </div>
       )}
 
