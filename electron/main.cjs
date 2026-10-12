@@ -49,10 +49,49 @@ function flush() {
   }
 }
 
+// 창 크기/위치 기억 (Word·PowerPoint 처럼 마지막 상태로 열기)
+// 최초 실행: 화면 작업영역의 큰 창 + 최대화. 이후: 직전 크기·위치·최대화 복원.
+const stateFile = () => path.join(app.getPath('userData'), 'window-state.json')
+
+function loadWindowState() {
+  const { screen } = require('electron')
+  const wa = screen.getPrimaryDisplay().workAreaSize
+  const def = {
+    width: Math.max(1024, Math.round(wa.width * 0.85)),
+    height: Math.max(720, Math.round(wa.height * 0.85)),
+    maximized: true,
+  }
+  try {
+    const s = JSON.parse(fs.readFileSync(stateFile(), 'utf8'))
+    if (!(s.width > 0 && s.height > 0)) return def
+    // 저장된 위치가 현재 모니터 안에 보일 때만 위치 복원(모니터 분리 대비)
+    if (typeof s.x === 'number' && typeof s.y === 'number') {
+      const visible = screen.getAllDisplays().some(({ workArea: a }) =>
+        s.x < a.x + a.width - 100 && s.x + s.width > a.x + 100 &&
+        s.y >= a.y - 10 && s.y < a.y + a.height - 100)
+      if (!visible) { delete s.x; delete s.y }
+    }
+    return { ...def, ...s }
+  } catch {
+    return def
+  }
+}
+
+function saveWindowState(win) {
+  try {
+    const b = win.getNormalBounds() // 최대화 상태여도 복원 시 크기
+    fs.writeFileSync(stateFile(), JSON.stringify({ ...b, maximized: win.isMaximized() }))
+  } catch {}
+}
+
 function createWindow() {
+  const st = loadWindowState()
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: st.width,
+    height: st.height,
+    ...(typeof st.x === 'number' ? { x: st.x, y: st.y } : { center: true }),
+    minWidth: 640,
+    minHeight: 480,
     title: '문서뷰어',
     autoHideMenuBar: true,
     backgroundColor: '#f4f5f7', // 흰 화면 깜빡임 방지
@@ -63,8 +102,12 @@ function createWindow() {
       nodeIntegration: false,
     },
   })
-  mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.once('ready-to-show', () => {
+    if (st.maximized) mainWindow.maximize()
+    mainWindow.show()
+  })
   mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+  mainWindow.on('close', () => saveWindowState(mainWindow))
   mainWindow.on('closed', () => {
     mainWindow = null
     rendererReady = false
