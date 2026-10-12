@@ -185,6 +185,7 @@ export default function XlsxView({
   name = 'sheet.xlsx',
   kind = 'xlsx',
   zoom = 1,
+  onPrint,
 }) {
   const [model, setModel] = useState(null)
   const [activeSheet, setActiveSheet] = useState(0)
@@ -473,12 +474,15 @@ export default function XlsxView({
         ) : (
           dirty && <span className="tool-hint">저장하지 않은 변경이 있습니다.</span>
         )}
+        <button className="tool-btn print-btn" onClick={onPrint} title="인쇄 (Ctrl+P)">
+          🖨 인쇄
+        </button>
       </div>
 
       <div className="xlsx-grid-scroll" ref={gridRef}>
         <table className="xlsx-table" style={{ zoom }}>
           <colgroup>
-            <col style={{ width: 44 }} />
+            <col className="head-col" style={{ width: 44 }} />
             {sheet.colWidths.map((w, i) => (
               <col key={i} style={w != null ? { width: w } : undefined} />
             ))}

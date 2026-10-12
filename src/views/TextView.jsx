@@ -39,6 +39,7 @@ export default function TextView({
   name = 'file.txt',
   kind = 'txt',
   zoom = 1,
+  onPrint,
 }) {
   const original = useMemo(() => decodeText(buffer), [buffer])
   const [editMode, setEditMode] = useState(false)
@@ -120,9 +121,14 @@ export default function TextView({
               : '마크다운 미리보기'
             : `${kind.toUpperCase()} · 텍스트`}
         </span>
+        <button className="tool-btn print-btn" onClick={onPrint} title="인쇄 (Ctrl+P)">
+          🖨 인쇄
+        </button>
       </div>
 
       <div className="text-scroll">
+        {/* textarea 는 보이는 부분만 인쇄되므로 인쇄용 사본을 따로 둔다 */}
+        {editMode && <pre className="text-view print-only">{text}</pre>}
         {editMode ? (
           <textarea
             className="text-edit"

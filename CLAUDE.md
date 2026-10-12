@@ -15,7 +15,7 @@
 
 ```
 src/
-  App.jsx              파일 상태/드래그앤드롭/탭/확대축소/찾기/우클릭메뉴/최초실행안내
+  App.jsx              파일 상태/드래그앤드롭/탭/확대축소/찾기/우클릭메뉴/인쇄/최초실행안내
   views/
     DocxView.jsx       보기=docx-preview, 편집=mammoth(지연)+execCommand, 저장=html-to-docx
                        A4 페이지 자동맞춤(onAutoFit)
@@ -125,6 +125,10 @@ npm run dist:win       # 윈도우 설치 파일(release-exe/) — 윈도우에�
   (브라우저는 편집만). A4 페이지는 열 때 창 너비에 자동 맞춤.
 - **txt/log/ini/bat** — 모노스페이스 텍스트 뷰(+줄바꿈 토글), 편집·저장(UTF-8).
 - **md** — marked(지연)로 마크다운 렌더. 원문 편집 가능. innerHTML 최소 방어(sanitize).
+- **인쇄** — `window.print()` + `styles.css` 의 `@media print`(브라우저·단일 HTML·Electron
+  동일, 별도 IPC 없음). 화면 장식 숨김·스크롤/고정높이 해제·zoom 100% 고정·배경색
+  `print-color-adjust: exact`. docx 보기는 section 마다 한 장(`@page docx` 여백 0),
+  xlsx 는 행/열 머리글 제외, 텍스트는 항상 줄바꿈, textarea 편집 중엔 `.print-only` 사본 인쇄.
 
 ## 편집 기능의 한계 (정직하게)
 

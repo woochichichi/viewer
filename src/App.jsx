@@ -178,8 +178,22 @@ export default function App() {
     window.find?.(q, false, backwards, true, false, false, false)
   }, [])
 
+  // ---- 인쇄(Ctrl+P) ----
+  // 화면 장식(사이드바·탭·툴바 등)은 @media print CSS 로 숨기고 문서만 100% 배율로 인쇄.
+  // window.print() 는 브라우저/단일 HTML/Electron 모두 동일하게 동작(시스템 인쇄 대화상자).
+  const doPrint = useCallback(() => {
+    setCtx(null)
+    if (!activeId) return
+    window.print()
+  }, [activeId])
+
   useEffect(() => {
     const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault() // 브라우저 기본 인쇄 대신 앱 인쇄
+        doPrint()
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault()
         setFindOpen(true)
@@ -213,7 +227,7 @@ export default function App() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('wheel', onWheel)
     }
-  }, [zoomIn, zoomOut, zoomReset, findOpen])
+  }, [zoomIn, zoomOut, zoomReset, findOpen, doPrint])
 
   // ---- 우클릭 컨텍스트 메뉴 ----
   const [ctx, setCtx] = useState(null) // { x, y, text }
@@ -222,7 +236,7 @@ export default function App() {
     const text = sel && !sel.isCollapsed ? sel.toString().trim() : ''
     e.preventDefault()
     const x = Math.min(e.clientX, window.innerWidth - 210)
-    const y = Math.min(e.clientY, window.innerHeight - 160)
+    const y = Math.min(e.clientY, window.innerHeight - 200)
     setCtx({ x, y, text })
   }, [])
   useEffect(() => {
@@ -432,6 +446,7 @@ export default function App() {
                 <div className="dz-tips">
                   <span>🔍 찾기 <kbd>Ctrl</kbd>+<kbd>F</kbd></span>
                   <span>🔎 확대/축소 <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>−</kbd></span>
+                  <span>🖨 인쇄 <kbd>Ctrl</kbd>+<kbd>P</kbd></span>
                   <span>✏️ 열고 나서 편집·저장</span>
                 </div>
               </div>
@@ -448,6 +463,7 @@ export default function App() {
                   name={active.name}
                   zoom={zoom}
                   onAutoFit={setActiveZoom}
+                  onPrint={doPrint}
                 />
               )}
               {isSheet(active.kind) && (
@@ -457,6 +473,7 @@ export default function App() {
                   name={active.name}
                   kind={active.kind}
                   zoom={zoom}
+                  onPrint={doPrint}
                 />
               )}
               {isText(active.kind) && (
@@ -466,6 +483,7 @@ export default function App() {
                   name={active.name}
                   kind={active.kind}
                   zoom={zoom}
+                  onPrint={doPrint}
                 />
               )}
             </Suspense>
@@ -520,6 +538,11 @@ export default function App() {
           <button className="ctx-item" onClick={ctxSelectAll}>
             <span>전체 선택</span>
             <span className="ctx-key">Ctrl+A</span>
+          </button>
+          <div className="ctx-sep" />
+          <button className="ctx-item" disabled={!active} onClick={doPrint}>
+            <span>🖨 인쇄</span>
+            <span className="ctx-key">Ctrl+P</span>
           </button>
         </div>
       )}

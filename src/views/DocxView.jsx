@@ -8,6 +8,7 @@ export default function DocxView({
   name = 'document.docx',
   zoom = 1,
   onAutoFit,
+  onPrint,
 }) {
   const containerRef = useRef(null) // docx-preview 보기 영역
   const scrollRef = useRef(null) // 스크롤 컨테이너
@@ -315,6 +316,9 @@ export default function DocxView({
             <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
           </>
         )}
+        <button className="tool-btn print-btn" onClick={onPrint} title="인쇄 (Ctrl+P)">
+          🖨 인쇄
+        </button>
       </div>
 
       <div className="docx-scroll" ref={scrollRef}>
