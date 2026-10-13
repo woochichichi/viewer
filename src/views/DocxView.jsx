@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { renderAsync } from 'docx-preview'
 import { exportDocxSave, editedName } from '../lib/save.js'
+import { AlignIcon } from '../lib/icons.jsx'
 
 // 보기: docx-preview(서식 충실). 편집: mammoth 로 단순 HTML 화 → 편집 → docx 저장.
 export default function DocxView({
@@ -24,14 +25,16 @@ export default function DocxView({
   const [saved, setSaved] = useState(false)
 
   // A4 페이지를 창 너비에 맞춘다 (페이지 맞춤)
-  const fitToWidth = useCallback(() => {
+  const fitToWidth = useCallback((initial) => {
     const host = containerRef.current
     const scroll = scrollRef.current
     if (!host || !scroll) return
     const page = host.querySelector('.docx-wrapper > section')
     if (!page || !page.offsetWidth) return
     const avail = scroll.clientWidth - 48 // 좌우 패딩
-    onAutoFit?.(avail / page.offsetWidth)
+    // 열 때 자동 맞춤(initial)은 넓은 모니터에서 200% 처럼 과하게 커지지 않도록 150% 상한
+    const z = avail / page.offsetWidth
+    onAutoFit?.(initial === true ? Math.min(z, 1.5) : z)
   }, [onAutoFit])
 
   // ---- 보기: docx-preview 렌더 ----
@@ -59,7 +62,7 @@ export default function DocxView({
         // A4 페이지가 창 너비에 맞게 최초 1회 자동 맞춤
         if (!didFitRef.current) {
           didFitRef.current = true
-          requestAnimationFrame(() => setTimeout(fitToWidth, 0))
+          requestAnimationFrame(() => setTimeout(() => fitToWidth(true), 0))
         }
       })
       .catch((err) => {
@@ -162,7 +165,7 @@ export default function DocxView({
   }, [])
 
   const handleSave = useCallback(async () => {
-    if (!editRef.current) return
+    if (!editRef.current || saving) return
     setSaving(true)
     try {
       const res = await exportDocxSave(
@@ -180,15 +183,28 @@ export default function DocxView({
     } finally {
       setSaving(false)
     }
-  }, [name])
+  }, [name, saving])
+
+  // Ctrl+S (App 이 보냄): 이 탭이 활성이고 편집 중일 때만 저장
+  const rootRef = useRef(null)
+  const saveRef = useRef(null)
+  saveRef.current = () => {
+    if (editMode) handleSave() // 보기 모드는 바뀐 내용이 없으므로 무시
+  }
+  useEffect(() => {
+    const h = () => rootRef.current?.closest('.view-pane.active') && saveRef.current()
+    window.addEventListener('dv-save', h)
+    return () => window.removeEventListener('dv-save', h)
+  }, [])
 
   return (
-    <div className="docx-outer">
+    <div className="docx-outer" ref={rootRef}>
       <div className="edit-toolbar">
         <button
           className={'tool-btn' + (editMode ? ' on' : '')}
           disabled={preparing}
           onClick={() => (editMode ? setEditMode(false) : enterEdit())}
+          title={editMode ? '편집 끝내고 원래 보기로 (편집 내용은 유지)' : '편집 모드로 바꾸기'}
         >
           {preparing ? '편집 준비 중…' : editMode ? '✏️ 편집 중' : '✏️ 편집'}
         </button>
@@ -198,13 +214,14 @@ export default function DocxView({
               className="tool-btn primary"
               disabled={saving}
               onClick={handleSave}
+              title="새 파일(이름-편집.docx)로 저장 (Ctrl+S)"
             >
               {saving ? '저장 중…' : saved ? '✓ 저장됨' : '💾 다른 이름으로 저장'}
             </button>
             <span className="tool-sep" />
             <button
               className="tool-btn fmt"
-              title="굵게"
+              title="굵게 (Ctrl+B)"
               onMouseDown={(e) => {
                 e.preventDefault()
                 document.execCommand('bold')
@@ -214,7 +231,7 @@ export default function DocxView({
             </button>
             <button
               className="tool-btn fmt"
-              title="기울임"
+              title="기울임 (Ctrl+I)"
               onMouseDown={(e) => {
                 e.preventDefault()
                 document.execCommand('italic')
@@ -224,7 +241,7 @@ export default function DocxView({
             </button>
             <button
               className="tool-btn fmt"
-              title="밑줄"
+              title="밑줄 (Ctrl+U)"
               onMouseDown={(e) => {
                 e.preventDefault()
                 document.execCommand('underline')
@@ -234,7 +251,7 @@ export default function DocxView({
             </button>
             <label
               className="tool-btn fmt color-btn"
-              title="글자색"
+              title="글자색 (글자를 선택한 뒤)"
               onMouseDown={saveSel}
             >
               <span style={{ color: '#c0392b' }}>가</span>
@@ -245,7 +262,7 @@ export default function DocxView({
             </label>
             <label
               className="tool-btn fmt color-btn"
-              title="형광펜"
+              title="형광펜 (글자를 선택한 뒤)"
               onMouseDown={saveSel}
             >
               <span style={{ background: '#ffe08a', padding: '0 3px' }}>H</span>
@@ -257,33 +274,33 @@ export default function DocxView({
             <span className="tool-sep" />
             <button
               className="tool-btn fmt"
-              title="왼쪽"
+              title="왼쪽 맞춤"
               onMouseDown={(e) => {
                 e.preventDefault()
                 document.execCommand('justifyLeft')
               }}
             >
-              ⬅
+              <AlignIcon dir="left" />
             </button>
             <button
               className="tool-btn fmt"
-              title="가운데"
+              title="가운데 맞춤"
               onMouseDown={(e) => {
                 e.preventDefault()
                 document.execCommand('justifyCenter')
               }}
             >
-              ↔
+              <AlignIcon dir="center" />
             </button>
             <button
               className="tool-btn fmt"
-              title="오른쪽"
+              title="오른쪽 맞춤"
               onMouseDown={(e) => {
                 e.preventDefault()
                 document.execCommand('justifyRight')
               }}
             >
-              ➡
+              <AlignIcon dir="right" />
             </button>
             <span className="tool-sep" />
             <select
@@ -306,19 +323,24 @@ export default function DocxView({
           </>
         )}
         {editMode ? (
-          <span className="tool-hint">
+          <span
+            className="tool-hint"
+            title="텍스트 수정 + 서식(B/I/U·색·형광·정렬·크기). 저장 시 정교한 서식은 일부 손실될 수 있어요."
+          >
             텍스트 수정 + 서식(B/I/U·색·형광·정렬·크기). 저장 시 정교한 서식은 일부 손실될 수 있어요.
           </span>
         ) : (
           <>
             <button
               className="tool-btn"
-              onClick={fitToWidth}
+              onClick={() => fitToWidth(false)}
               title="A4 한 페이지를 창 너비에 맞춤"
             >
               ⤢ 페이지 맞춤
             </button>
-            <span className="tool-hint">보기 모드 — 서식이 충실히 표시됩니다.</span>
+            <span className="tool-hint" title="보기 모드 — 서식이 충실히 표시됩니다. 고치려면 [편집]">
+              보기 모드 — 서식이 충실히 표시됩니다.
+            </span>
           </>
         )}
         <button className="tool-btn print-btn" onClick={onPrint} title="인쇄 (Ctrl+P)">
@@ -329,7 +351,7 @@ export default function DocxView({
       <div className="docx-scroll" ref={scrollRef}>
         {/* 보기 영역 */}
         {!editMode && status === 'loading' && (
-          <div className="state-note">문서를 렌더링하는 중…</div>
+          <div className="state-note loading">문서를 렌더링하는 중…</div>
         )}
         {!editMode && status === 'error' && (
           <div className="state-note error">문서를 열 수 없습니다: {error}</div>

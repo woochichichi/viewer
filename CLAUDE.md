@@ -16,6 +16,8 @@
 ```
 src/
   App.jsx              파일 상태/드래그앤드롭/탭/확대축소/찾기/우클릭메뉴/인쇄/최초실행안내
+                       한 번 연 탭의 뷰는 마운트 유지(.view-pane, 숨김만 전환 → 편집 유지).
+                       단축키는 window 캡처 단계(Ctrl+O/S/F/P, 확대). Ctrl+S → 'dv-save' 이벤트
   views/
     DocxView.jsx       보기=docx-preview, 편집=mammoth(지연)+execCommand, 저장=html-to-docx
                        A4 페이지 자동맞춤(onAutoFit)
@@ -114,6 +116,9 @@ npm run dist:win       # 윈도우 설치 파일(release-exe/) — 윈도우에�
 
 ## 포맷별 처리 요약
 
+- **xlsx 주의** — ExcelJS 는 불러온 셀끼리 style 객체를 공유 → 서식 수정은 반드시
+  `cell.style = {...cell.style, font: …}` 처럼 사본으로. spliceRows/Columns 는 병합을 안
+  옮기므로 `spliceWithMerges` 사용.
 - **xlsx** — ExcelJS 로 읽어 채우기색·글꼴·테두리·정렬·병합·열너비를 렌더. 테마색은
   `THEME` 팔레트+tint 근사(`colorToCss`). 편집 저장 시 **스타일 보존**(원본 wb 유지
   → `wb.xlsx.writeBuffer()`). SheetJS 무료판의 서식 손실 문제 없음.
@@ -122,9 +127,14 @@ npm run dist:win       # 윈도우 설치 파일(release-exe/) — 윈도우에�
   **EUC-KR 폴백**(한글 엑셀 CSV 대응). 편집 저장은 `.xlsx` 로(서식 보존).
 - **docx** — 보기=docx-preview(충실). 편집=mammoth 로 단순 HTML 화 후 contentEditable
   (+execCommand 서식). 저장=html-to-docx(네이티브). **워드 저장은 앱(.exe) 전용**
-  (브라우저는 편집만). A4 페이지는 열 때 창 너비에 자동 맞춤.
-- **txt/log/ini/bat** — 모노스페이스 텍스트 뷰(+줄바꿈 토글), 편집·저장(UTF-8).
-- **md** — marked(지연)로 마크다운 렌더. 원문 편집 가능. innerHTML 최소 방어(sanitize).
+  (브라우저는 편집만). A4 페이지는 열 때 창 너비에 자동 맞춤(최대 150%).
+  docx-preview className 은 문서마다 `docx<id>`(여러 docx 스타일 충돌 방지).
+- **txt/log/ini/bat** — 모노스페이스 텍스트 뷰(+줄바꿈 토글), 편집·저장. UTF-8(BOM)/
+  UTF-16(BOM)/EUC-KR 자동 감지, 저장 시 **원래 인코딩·CRLF 유지**(.bat 이 cmd 에서 깨지지 않게).
+- **md** — marked(지연)로 마크다운 렌더. 원문 편집 가능. DOMParser 로 sanitize
+  (script·svg·iframe 등 제거, on*/srcdoc/style, javascript:·data: URL 차단).
+- **링크** — 문서 속 링크는 새 창(Electron 은 기본 브라우저). 앱 창 자체 이동은
+  렌더러 클릭 가로채기 + main 의 will-navigate/setWindowOpenHandler 로 차단.
 - **인쇄** — `window.print()` + `styles.css` 의 `@media print`(브라우저·단일 HTML·Electron
   동일, 별도 IPC 없음). 화면 장식 숨김·스크롤/고정높이 해제·zoom 100% 고정·배경색
   `print-color-adjust: exact`. docx 보기는 section 마다 한 장(`@page docx` 여백 0),

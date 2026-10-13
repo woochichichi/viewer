@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ExcelJS from 'exceljs/dist/exceljs.min.js'
 import { saveBytes, editedName } from '../lib/save.js'
+import { AlignIcon } from '../lib/icons.jsx'
 
 // 1-indexed 열 인덱스 → 열 문자 (1→A, 27→AA)
 function colLabel(c) {
@@ -276,6 +277,15 @@ export default function XlsxView({
     }
   }, [buffer, kind])
 
+  // 선택한 셀의 행·열 머리글 강조 (엑셀처럼 현재 위치 표시)
+  const markHeads = (r, c) => {
+    const g = gridRef.current
+    if (!g) return
+    g.querySelectorAll('th.hl').forEach((el) => el.classList.remove('hl'))
+    g.querySelector(`th.col-head[data-c="${c}"]`)?.classList.add('hl')
+    g.querySelector(`th.row-head[data-r="${r}"]`)?.classList.add('hl')
+  }
+
   const tdAt = (r, c) =>
     gridRef.current?.querySelector(`td[data-r="${r}"][data-c="${c}"]`)
 
@@ -295,6 +305,17 @@ export default function XlsxView({
   // 셀 키보드: Enter 는 줄바꿈 대신 아래 칸으로(엑셀처럼). 셀 안 줄바꿈은 저장 시 사라져
   // 화면과 저장 결과가 달라지므로 막는다. Tab=오른쪽, Shift 와 함께 반대 방향.
   const onCellKeyDown = useCallback((e, r, c) => {
+    // Ctrl+B/I/U: 브라우저 기본 서식(<b> 등)은 셀 서식으로 저장되지 않으므로 가로챈다
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.key.toLowerCase()
+      if (k === 'b' || e.code === 'KeyB') {
+        e.preventDefault()
+        applyFmt({ bold: 'toggle' })
+      } else if (k === 'i' || k === 'u' || e.code === 'KeyI' || e.code === 'KeyU') {
+        e.preventDefault()
+      }
+      return
+    }
     if (e.key !== 'Enter' && e.key !== 'Tab') return
     if (e.nativeEvent.isComposing) return // 한글 조합 중 Enter 는 조합 확정용
     e.preventDefault()
@@ -431,6 +452,18 @@ export default function XlsxView({
   }, [model, name])
 
   // 행/열 삽입·삭제: 대기 편집을 워크북에 반영 후 구조 변경 → 모델 재생성
+  // Ctrl+S (App 이 보냄): 이 탭이 활성이고 변경 있을 때 저장
+  const rootRef = useRef(null)
+  const saveRef = useRef(null)
+  saveRef.current = () => {
+    if (dirty && !saving) handleSave()
+  }
+  useEffect(() => {
+    const h = () => rootRef.current?.closest('.view-pane.active') && saveRef.current()
+    window.addEventListener('dv-save', h)
+    return () => window.removeEventListener('dv-save', h)
+  }, [])
+
   const structOp = useCallback(
     (op) => {
       const sel = selRef.current
@@ -456,24 +489,37 @@ export default function XlsxView({
     [model]
   )
 
-  if (!model) return <div className="state-note">스프레드시트를 여는 중…</div>
+  if (!model)
+    return (
+      <div className="state-note loading" ref={rootRef}>
+        스프레드시트를 여는 중…
+      </div>
+    )
   if (model.error)
     return (
-      <div className="state-note error">스프레드시트를 열 수 없습니다: {model.error}</div>
+      <div className="state-note error" ref={rootRef}>
+        스프레드시트를 열 수 없습니다: {model.error}
+        <br />
+        <small>파일이 손상되었거나 암호가 걸린 문서일 수 있습니다.</small>
+      </div>
     )
 
   const { sheets } = model.data
   if (!sheets.length)
-    return <div className="state-note error">표시할 워크시트가 없습니다 (차트 시트만 있는 파일).</div>
+    return (
+      <div className="state-note error" ref={rootRef}>
+        표시할 워크시트가 없습니다 (차트 시트만 있는 파일).
+      </div>
+    )
   const sheet = sheets[Math.min(activeSheet, sheets.length - 1)]
 
   return (
-    <div className="xlsx-wrap">
+    <div className="xlsx-wrap" ref={rootRef}>
       <div className="edit-toolbar">
         <button
           className={'tool-btn' + (editMode ? ' on' : '')}
           onClick={() => setEditMode((v) => !v)}
-          title="편집 모드 켜기/끄기"
+          title={editMode ? '편집 끝내기 (편집 내용은 유지)' : '편집 모드로 바꾸기 (셀 클릭해 수정)'}
         >
           {editMode ? '✏️ 편집 중' : '✏️ 편집'}
         </button>
@@ -481,7 +527,11 @@ export default function XlsxView({
           className="tool-btn primary"
           disabled={!dirty || saving}
           onClick={handleSave}
-          title="다른 이름으로 저장 (Ctrl+S 아님, 버튼 클릭)"
+          title={
+            dirty
+              ? `새 파일(이름-편집.xlsx)로 저장 (Ctrl+S)`
+              : '변경 내용이 없습니다'
+          }
         >
           {saving ? '저장 중…' : saved ? '✓ 저장됨' : '💾 저장'}
         </button>
@@ -491,7 +541,7 @@ export default function XlsxView({
             <span className="tool-sep" />
             <button
               className="tool-btn fmt"
-              title="굵게"
+              title="굵게 (Ctrl+B)"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applyFmt({ bold: 'toggle' })}
             >
@@ -522,11 +572,11 @@ export default function XlsxView({
                 </option>
               ))}
             </select>
-            <label className="tool-btn fmt color-btn" title="글자색">
+            <label className="tool-btn fmt color-btn" title="글자색 (선택한 셀)">
               <span style={{ color: '#c0392b' }}>가</span>
               <input type="color" onChange={(e) => applyFmt({ color: e.target.value })} />
             </label>
-            <label className="tool-btn fmt color-btn" title="채우기색">
+            <label className="tool-btn fmt color-btn" title="채우기 색 (선택한 셀)">
               <span style={{ background: '#ffe08a', padding: '0 3px' }}>■</span>
               <input type="color" onChange={(e) => applyFmt({ fill: e.target.value })} />
             </label>
@@ -537,7 +587,7 @@ export default function XlsxView({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applyFmt({ align: 'left' })}
             >
-              ⬅
+              <AlignIcon dir="left" />
             </button>
             <button
               className="tool-btn fmt"
@@ -545,7 +595,7 @@ export default function XlsxView({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applyFmt({ align: 'center' })}
             >
-              ↔
+              <AlignIcon dir="center" />
             </button>
             <button
               className="tool-btn fmt"
@@ -553,29 +603,34 @@ export default function XlsxView({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applyFmt({ align: 'right' })}
             >
-              ➡
+              <AlignIcon dir="right" />
             </button>
             <span className="tool-sep" />
-            <button className="tool-btn fmt" title="아래에 행 추가" onClick={() => structOp('insRow')}>
-              ⊞행
+            <button className="tool-btn fmt" title="선택한 셀 아래에 행 삽입" onClick={() => structOp('insRow')}>
+              +행
             </button>
-            <button className="tool-btn fmt" title="현재 행 삭제" onClick={() => structOp('delRow')}>
-              ⊟행
+            <button className="tool-btn fmt" title="선택한 셀의 행 삭제" onClick={() => structOp('delRow')}>
+              −행
             </button>
-            <button className="tool-btn fmt" title="오른쪽에 열 추가" onClick={() => structOp('insCol')}>
-              ⊞열
+            <button className="tool-btn fmt" title="선택한 셀 오른쪽에 열 삽입" onClick={() => structOp('insCol')}>
+              +열
             </button>
-            <button className="tool-btn fmt" title="현재 열 삭제" onClick={() => structOp('delCol')}>
-              ⊟열
+            <button className="tool-btn fmt" title="선택한 셀의 열 삭제" onClick={() => structOp('delCol')}>
+              −열
             </button>
           </>
         )}
         {editMode ? (
-          <span className="tool-hint">
-            셀 클릭=값 수정 · Shift+클릭=범위 선택 · 서식/행열 버튼 적용
+          <span
+            className="tool-hint"
+            title="셀 클릭=값 수정 · Enter/Tab=다음 셀 · Shift+클릭=범위 선택 · 서식/행열 버튼 적용"
+          >
+            셀 클릭=값 수정 · Enter/Tab=다음 셀 · Shift+클릭=범위 선택
           </span>
         ) : (
-          dirty && <span className="tool-hint">저장하지 않은 변경이 있습니다.</span>
+          <span className="tool-hint">
+            {dirty ? '저장하지 않은 변경이 있습니다.' : `${sheet.rowCount}행 × ${sheet.colCount}열`}
+          </span>
         )}
         <button className="tool-btn print-btn" onClick={onPrint} title="인쇄 (Ctrl+P)">
           🖨 인쇄
@@ -594,7 +649,7 @@ export default function XlsxView({
             <tr>
               <th className="corner" />
               {Array.from({ length: sheet.colCount }, (_, i) => (
-                <th key={i} className="col-head">
+                <th key={i} className="col-head" data-c={i + 1}>
                   {colLabel(i + 1)}
                 </th>
               ))}
@@ -612,7 +667,9 @@ export default function XlsxView({
                       : undefined
                 }
               >
-                <th className="row-head">{ri + 1}</th>
+                <th className="row-head" data-r={ri + 1}>
+                  {ri + 1}
+                </th>
                 {row.cells.map((cell, ci) => {
                   if (cell === null) return null
                   const k = cellKey(sheet.name, ri + 1, ci + 1)
@@ -652,6 +709,7 @@ export default function XlsxView({
                       onFocus={
                         editMode
                           ? (e) => {
+                              markHeads(ri + 1, ci + 1)
                               selRef.current = {
                                 sheet: sheet.name,
                                 r: ri + 1,

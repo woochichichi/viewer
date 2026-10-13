@@ -177,6 +177,18 @@ export default function App() {
     [addFiles]
   )
 
+  // 탭·목록 항목 키보드 조작: Enter/Space=선택, Delete=닫기
+  const onItemKey = (e, id) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setActiveId(id)
+    } else if (e.key === 'Delete') {
+      e.preventDefault()
+      closeFile(id)
+    }
+  }
+
   const closeFile = useCallback(
     (id, e) => {
       e?.stopPropagation()
@@ -302,7 +314,20 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && isKey(e, 'f')) {
         e.preventDefault()
         setFindOpen(true)
-        setTimeout(() => findInputRef.current?.select(), 30)
+        // 이미 열려 있으면 바로 선택, 새로 열리면 입력창 autoFocus 로 포커스
+        findInputRef.current?.select()
+        return
+      }
+      // 파일 열기 (브라우저 기본 Ctrl+O 는 앱을 떠나 파일을 열어버림)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && isKey(e, 'o')) {
+        e.preventDefault()
+        inputRef.current?.click()
+        return
+      }
+      // 저장: 활성 탭의 뷰에 저장 요청 (브라우저 기본 '페이지 저장' 대신)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && isKey(e, 's')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('dv-save'))
         return
       }
       if (e.key === 'Escape' && findOpen) {
@@ -463,6 +488,11 @@ export default function App() {
   }, [])
 
   const active = files.find((f) => f.id === activeId) || null
+
+  // 창 제목 = 현재 파일 이름 (작업 표시줄·브라우저 탭에서 구분)
+  useEffect(() => {
+    document.title = active ? `${active.name} - 문서뷰어` : '문서뷰어'
+  }, [active])
   // 한 번이라도 활성화된 파일만 뷰를 마운트(여러 파일을 한꺼번에 열어도 보는 것만 파싱)
   if (active) mountedRef.current.add(active.id)
 
@@ -494,7 +524,11 @@ export default function App() {
           </p>
         </div>
 
-        <button className="pick-btn" onClick={() => inputRef.current?.click()}>
+        <button
+          className="pick-btn"
+          onClick={() => inputRef.current?.click()}
+          title="파일 열기 (Ctrl+O)"
+        >
           + 파일 열기
         </button>
         <input
@@ -517,7 +551,9 @@ export default function App() {
                 'file-item' + (f.id === activeId ? ' active' : '')
               }
               onClick={() => setActiveId(f.id)}
-              title={f.name}
+              onKeyDown={(e) => onItemKey(e, f.id)}
+              tabIndex={0}
+              title={`${f.name} (${formatSize(f.size)})`}
             >
               <span className={'badge badge-' + f.kind}>{f.kind}</span>
               <span className="file-name">{f.name}</span>
@@ -526,6 +562,7 @@ export default function App() {
                 className="close-x"
                 onClick={(e) => closeFile(f.id, e)}
                 title="닫기"
+                aria-label={`${f.name} 닫기`}
               >
                 ×
               </button>
@@ -537,12 +574,19 @@ export default function App() {
       <main className="viewer">
         {/* 상단 탭 */}
         {files.length > 0 && (
-          <div className="tabbar">
+          <div className="tabbar" role="tablist">
             {files.map((f) => (
               <div
                 key={f.id}
                 className={'tab' + (f.id === activeId ? ' active' : '')}
                 onClick={() => setActiveId(f.id)}
+                onKeyDown={(e) => onItemKey(e, f.id)}
+                // 가운데 버튼 클릭 = 탭 닫기 (브라우저 탭과 동일)
+                onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+                onAuxClick={(e) => e.button === 1 && closeFile(f.id, e)}
+                role="tab"
+                aria-selected={f.id === activeId}
+                tabIndex={0}
                 title={f.name}
               >
                 <span className={'badge badge-' + f.kind}>{f.kind}</span>
@@ -550,7 +594,8 @@ export default function App() {
                 <button
                   className="close-x"
                   onClick={(e) => closeFile(f.id, e)}
-                  title="닫기"
+                  title="닫기 (가운데 버튼 클릭)"
+                  aria-label={`${f.name} 닫기`}
                 >
                   ×
                 </button>
@@ -569,7 +614,9 @@ export default function App() {
               <input
                 ref={findInputRef}
                 className={'find-input' + (findMiss ? ' miss' : '')}
-                placeholder="찾기…"
+                placeholder="문서에서 찾기…"
+                autoFocus
+                aria-label="찾을 내용"
                 value={findQuery}
                 onChange={(e) => {
                   setFindQuery(e.target.value)
@@ -580,7 +627,8 @@ export default function App() {
                   if (e.key === 'Escape') setFindOpen(false)
                 }}
               />
-              <button onClick={() => runFind(true)} title="이전">
+              {findMiss && <span className="find-miss">결과 없음</span>}
+              <button onClick={() => runFind(true)} title="이전 (Shift+Enter)">
                 ↑
               </button>
               <button onClick={() => runFind(false)} title="다음 (Enter)">
@@ -602,17 +650,50 @@ export default function App() {
                 <p className="dz-title">
                   파일을 이곳에 끌어다 놓으세요
                 </p>
-                <p className="dz-sub">
-                  또는 좌측의 <b>파일 열기</b> 버튼을 사용하세요
-                  <br />
-                  지원 형식: docx · xlsx · xls · csv · txt · log · md · ini · bat
-                </p>
-                <div className="dz-tips">
-                  <span>🔍 찾기 <kbd>Ctrl</kbd>+<kbd>F</kbd></span>
-                  <span>🔎 확대/축소 <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>−</kbd></span>
-                  <span>🖨 인쇄 <kbd>Ctrl</kbd>+<kbd>P</kbd></span>
-                  <span>✏️ 열고 나서 편집·저장</span>
+                <p className="dz-sub">여러 파일을 한 번에 열 수 있어요</p>
+                <button
+                  className="dz-open"
+                  onClick={() => inputRef.current?.click()}
+                  title="파일 열기 (Ctrl+O)"
+                >
+                  파일 열기…
+                </button>
+                <div className="dz-formats">
+                  <span className="badge badge-docx">docx</span>
+                  <span className="badge badge-xlsx">xlsx</span>
+                  <span className="badge badge-xls">xls</span>
+                  <span className="badge badge-csv">csv</span>
+                  {TEXT_EXTS.map((e) => (
+                    <span key={e} className={'badge badge-' + e}>
+                      {e}
+                    </span>
+                  ))}
                 </div>
+                <div className="dz-tips">
+                  <span>파일 열기</span>
+                  <span>
+                    <kbd>Ctrl</kbd>+<kbd>O</kbd>
+                  </span>
+                  <span>찾기</span>
+                  <span>
+                    <kbd>Ctrl</kbd>+<kbd>F</kbd>
+                  </span>
+                  <span>확대 / 축소</span>
+                  <span>
+                    <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd> · <kbd>Ctrl</kbd>+휠
+                  </span>
+                  <span>저장 (편집 후)</span>
+                  <span>
+                    <kbd>Ctrl</kbd>+<kbd>S</kbd>
+                  </span>
+                  <span>인쇄</span>
+                  <span>
+                    <kbd>Ctrl</kbd>+<kbd>P</kbd>
+                  </span>
+                </div>
+                <p className="dz-note">
+                  파일은 이 PC 안에서만 열리며 외부로 전송되지 않습니다.
+                </p>
               </div>
             </div>
           )}
@@ -626,7 +707,7 @@ export default function App() {
                 className={'view-pane' + (f.id === activeId ? ' active' : '')}
               >
                 <Suspense
-                  fallback={<div className="state-note">여는 중…</div>}
+                  fallback={<div className="state-note loading">여는 중…</div>}
                 >
                   {f.kind === 'docx' && (
                     <DocxView
@@ -662,17 +743,17 @@ export default function App() {
 
           {active && (
             <div className="zoom-bar">
-              <button onClick={zoomOut} title="축소 (Ctrl -)">
+              <button onClick={zoomOut} title="축소 (Ctrl+−, Ctrl+휠)">
                 −
               </button>
               <button
                 className="zoom-pct"
                 onClick={zoomReset}
-                title="원래대로 (Ctrl 0)"
+                title="100%로 (Ctrl+0)"
               >
                 {Math.round(zoom * 100)}%
               </button>
-              <button onClick={zoomIn} title="확대 (Ctrl +)">
+              <button onClick={zoomIn} title="확대 (Ctrl++, Ctrl+휠)">
                 +
               </button>
             </div>

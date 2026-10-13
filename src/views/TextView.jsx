@@ -185,13 +185,31 @@ export default function TextView({
     }
   }, [text, name, decoded])
 
+  // Ctrl+S (App 이 보냄): 이 탭이 활성이고 편집 중·변경 있을 때 저장
+  const rootRef = useRef(null)
+  const saveRef = useRef(null)
+  saveRef.current = () => {
+    if (editMode && dirty && !saving) handleSave()
+  }
+  useEffect(() => {
+    const h = () => rootRef.current?.closest('.view-pane.active') && saveRef.current()
+    window.addEventListener('dv-save', h)
+    return () => window.removeEventListener('dv-save', h)
+  }, [])
+
+  // 텍스트 인코딩·줄바꿈 표시 (메모장 상태 표시줄처럼)
+  const encLabel =
+    { 'utf-8': 'UTF-8', 'utf-16le': 'UTF-16 LE', 'utf-16be': 'UTF-16 BE', 'euc-kr': 'EUC-KR' }[
+      decoded.enc
+    ] + (decoded.bom && decoded.enc === 'utf-8' ? ' (BOM)' : '')
+
   return (
-    <div className="text-wrap">
+    <div className="text-wrap" ref={rootRef}>
       <div className="edit-toolbar">
         <button
           className={'tool-btn' + (editMode ? ' on' : '')}
           onClick={() => setEditMode((v) => !v)}
-          title="편집 모드 켜기/끄기"
+          title={editMode ? '편집 끝내기 (편집 내용은 유지)' : '편집 모드로 바꾸기'}
         >
           {editMode ? '✏️ 편집 중' : '✏️ 편집'}
         </button>
@@ -200,6 +218,11 @@ export default function TextView({
             className="tool-btn primary"
             disabled={!dirty || saving}
             onClick={handleSave}
+            title={
+              dirty
+                ? `새 파일(이름-편집.${kind})로 저장 (Ctrl+S) · 원래 인코딩·줄바꿈 유지`
+                : '변경 내용이 없습니다'
+            }
           >
             {saving ? '저장 중…' : saved ? '✓ 저장됨' : '💾 저장'}
           </button>
@@ -219,6 +242,8 @@ export default function TextView({
               ? '마크다운 원문 편집'
               : '마크다운 미리보기'
             : `${kind.toUpperCase()} · 텍스트`}
+          {` · ${encLabel} · ${decoded.crlf ? 'CRLF' : 'LF'}`}
+          {dirty && ' · 저장하지 않은 변경 있음'}
         </span>
         <button className="tool-btn print-btn" onClick={onPrint} title="인쇄 (Ctrl+P)">
           🖨 인쇄

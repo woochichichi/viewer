@@ -257,6 +257,32 @@ body {
 .close-x:hover {
   opacity: 1;
 }
+.tab .close-x,
+.file-item .close-x {
+  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.tab .close-x:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+.file-item .close-x:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* 키보드 사용자용 포커스 표시 (마우스 클릭 시에는 표시 안 함) */
+button:focus-visible,
+select:focus-visible,
+.tab:focus-visible,
+.file-item:focus-visible,
+.color-btn:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.file-item:focus-visible {
+  outline-offset: -2px;
+}
 
 /* ---------- Viewer ---------- */
 .viewer {
@@ -273,6 +299,8 @@ body {
   background: #e9ebf0;
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
+  scrollbar-width: thin;
+  flex-shrink: 0;
 }
 
 .tab {
@@ -285,12 +313,18 @@ body {
   cursor: pointer;
   font-size: 12.5px;
   max-width: 220px;
+  min-width: 0;
+  flex-shrink: 0;
   color: #444b57;
 }
+.tab:hover:not(.active) {
+  background: #d2d6de;
+}
 .tab.active {
-  background: var(--panel);
+  background: #f7f8fa; /* 아래 도구 막대와 이어져 보이게 */
   color: var(--text);
   font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 .tab-name {
   overflow: hidden;
@@ -324,9 +358,36 @@ body {
 .dropzone-inner {
   border: 2px dashed #c2c8d2;
   border-radius: 14px;
-  padding: 48px 64px;
+  padding: 36px 56px 28px;
   text-align: center;
   background: #fbfcfd;
+  max-width: 560px;
+}
+.dz-open {
+  margin-top: 6px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 10px 26px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dz-open:hover {
+  filter: brightness(1.08);
+}
+.dz-formats {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+}
+.dz-note {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 .dz-icon {
   font-size: 44px;
@@ -342,13 +403,19 @@ body {
   line-height: 1.6;
 }
 .dz-tips {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin: 20px auto 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 7px 18px;
   align-items: center;
+  justify-content: center;
   font-size: 12.5px;
-  color: #6b7280;
+  color: #5b6472;
+  text-align: left;
+}
+.dz-tips > span:nth-child(odd) {
+  text-align: right;
+  color: var(--muted);
 }
 .dz-tips kbd {
   background: #eef1f5;
@@ -367,6 +434,31 @@ body {
 }
 .state-note.error {
   color: #c0392b;
+  line-height: 1.6;
+}
+.state-note.error small {
+  color: var(--muted);
+}
+/* 무거운 파서 로딩 중 표시 */
+.state-note.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.state-note.loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d0d5dd;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: dv-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes dv-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---------- DOCX ---------- */
@@ -493,14 +585,21 @@ body {
   flex-shrink: 0;
 }
 .tool-hint {
-  white-space: normal;
-  flex: 1 1 auto;
+  /* 긴 안내문은 한 줄 말줄임(전체는 툴팁) → 좁은 창에서도 툴바가 두 줄로 접히지 않게 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
   min-width: 0;
 }
 .tool-btn.fmt {
   min-width: 34px;
   padding: 5px 8px;
   font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
 }
 .tool-btn.color-btn {
   position: relative;
@@ -540,8 +639,8 @@ body {
 /* 찾기 바 */
 .find-bar {
   position: absolute;
-  top: 12px;
-  right: 16px;
+  top: 52px; /* 도구 막대(인쇄 버튼)를 가리지 않게 그 아래 */
+  right: 20px;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -664,6 +763,18 @@ body {
   left: 0;
   z-index: 2;
 }
+.xlsx-table .row-head {
+  vertical-align: middle;
+}
+/* 선택한 셀의 행·열 머리글 강조 (엑셀처럼) */
+.xlsx-table th.hl {
+  background: #d9e6fa;
+  color: #1d4f9c;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.xlsx-table th.row-head.hl {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
 .xlsx-table .corner {
   z-index: 4;
 }
@@ -687,11 +798,15 @@ body {
   white-space: nowrap;
   color: #4a5261;
 }
+.sheet-tab:hover:not(.active) {
+  background: #fff;
+}
 .sheet-tab.active {
   background: #fff;
   border-bottom-color: #fff;
   color: var(--xlsx-badge);
   font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--xlsx-badge);
 }
 
 /* ---------- 최초 실행 안내 ---------- */
@@ -946,6 +1061,9 @@ body {
   .xlsx-table td.cell-sel {
     outline: none;
   }
+  .state-note.loading {
+    display: none;
+  }
   .xlsx-table td.editable:focus {
     box-shadow: none;
   }
@@ -979,4 +1097,11 @@ body {
 .find-input.miss {
   background: #fdecea;
   color: #b42318;
+  border-radius: 5px;
+}
+.find-miss {
+  font-size: 12px;
+  color: #b42318;
+  padding: 0 6px;
+  white-space: nowrap;
 }
