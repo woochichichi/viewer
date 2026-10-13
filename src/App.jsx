@@ -57,12 +57,18 @@ const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files'
 const isEditable = (t) =>
   !!t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')
 
+// 처음 열 때 확대 배율 (형식별). 워드는 1920 모니터에서도 A4 가 과하게 크지 않게 90%
+const DEFAULT_ZOOM = { docx: 0.9 }
+
 export default function App() {
   const [files, setFiles] = useState([]) // { id, name, kind, size, buffer }
   const [activeId, setActiveId] = useState(null)
   const mountedRef = useRef(new Set()) // 뷰가 마운트된 파일 id
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef(null)
+
+  // 파일별 확대 배율 (탭마다 개별 기억). 워드는 열 때 기본 90% (DEFAULT_ZOOM)
+  const [zoomMap, setZoomMap] = useState({})
 
   // 현재 열린 파일 목록(중복 열기 검사용 — setState 비동기 대비 ref 로 동기화)
   const filesRef = useRef([])
@@ -89,7 +95,16 @@ export default function App() {
       lastId = it.id
     }
     filesRef.current = opened
-    if (fresh.length) setFiles((prev) => [...prev, ...fresh])
+    if (fresh.length) {
+      setFiles((prev) => [...prev, ...fresh])
+      const init = fresh.filter((f) => DEFAULT_ZOOM[f.kind])
+      if (init.length)
+        setZoomMap((m) => {
+          const next = { ...m }
+          for (const f of init) next[f.id] = DEFAULT_ZOOM[f.kind]
+          return next
+        })
+    }
     if (lastId != null) setActiveId(lastId)
   }, [])
 
@@ -236,8 +251,6 @@ export default function App() {
   }, [addBufferFile])
 
   // ---- 확대/축소 ----
-  // 파일별 확대 배율 (탭마다 개별 기억)
-  const [zoomMap, setZoomMap] = useState({})
   const clampZoom = (z) => Math.min(3, Math.max(0.3, Math.round(z * 100) / 100))
   const setActiveZoom = useCallback(
     (v) => {
@@ -249,7 +262,7 @@ export default function App() {
     },
     [activeId]
   )
-  // 특정 파일의 배율 지정 (docx 페이지 자동 맞춤용 — 그 사이 다른 탭으로 바뀌어도 정확히)
+  // 특정 파일의 배율 지정 (docx '페이지 맞춤' 버튼용 — 그 사이 다른 탭으로 바뀌어도 정확히)
   const setZoomFor = useCallback((id, z) => {
     setZoomMap((m) => ({ ...m, [id]: clampZoom(z) }))
   }, [])

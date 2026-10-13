@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { renderAsync } from 'docx-preview'
 import { exportDocxSave, editedName } from '../lib/save.js'
 import { AlignIcon } from '../lib/icons.jsx'
+import { annotateDocx, paginate } from '../lib/paginate.js'
 
 // 보기: docx-preview(서식 충실). 편집: mammoth 로 단순 HTML 화 → 편집 → docx 저장.
 export default function DocxView({
@@ -15,8 +16,7 @@ export default function DocxView({
   const containerRef = useRef(null) // docx-preview 보기 영역
   const scrollRef = useRef(null) // 스크롤 컨테이너
   const editRef = useRef(null) // 편집(contentEditable) 영역
-  const didFitRef = useRef(false)
-  const [status, setStatus] = useState('loading') // loading | done | error
+  const [status, setStatus] = useState('loading') // loading | layout(페이지 나누는 중) | done | error
   const [error, setError] = useState('')
   const [editMode, setEditMode] = useState(false)
   const [editHtml, setEditHtml] = useState(null) // mammoth 결과(최초 1회)
@@ -24,17 +24,15 @@ export default function DocxView({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  // A4 페이지를 창 너비에 맞춘다 (페이지 맞춤)
-  const fitToWidth = useCallback((initial) => {
+  // A4 페이지를 창 너비에 맞춘다 ('페이지 맞춤' 버튼. 열 때는 App 이 기본 90%)
+  const fitToWidth = useCallback(() => {
     const host = containerRef.current
     const scroll = scrollRef.current
     if (!host || !scroll) return
     const page = host.querySelector('.docx-wrapper > section')
     if (!page || !page.offsetWidth) return
     const avail = scroll.clientWidth - 48 // 좌우 패딩
-    // 열 때 자동 맞춤(initial)은 넓은 모니터에서 200% 처럼 과하게 커지지 않도록 150% 상한
-    const z = avail / page.offsetWidth
-    onAutoFit?.(initial === true ? Math.min(z, 1.5) : z)
+    onAutoFit?.(avail / page.offsetWidth)
   }, [onAutoFit])
 
   // ---- 보기: docx-preview 렌더 ----
@@ -51,19 +49,23 @@ export default function DocxView({
       className: 'docx' + docId,
       inWrapper: true,
       breakPages: true,
+      // 워드가 마지막 저장 때 기록한 페이지 위치(lastRenderedPageBreak)는 쓰지 않는다.
+      // 자동 페이지 나눔(paginate)이 실제 렌더 높이로 나누므로, 이 표시까지 쓰면 글꼴 차이로
+      // 이중으로 나뉘어 몇 줄짜리 페이지가 생긴다. 명시적 페이지/구역 나누기는 그대로 유지.
+      ignoreLastRenderedPageBreak: true,
       experimental: true,
       useBase64URL: true,
     })
-      .then(() => {
+      .then(async (doc) => {
         if (cancelled) return
         // 공통 CSS(그림자·인쇄 페이지 나눔)가 적용되도록 래퍼에 공통 클래스 부여
-        el.querySelector(`.docx${docId}-wrapper`)?.classList.add('docx-wrapper')
-        setStatus('done')
-        // A4 페이지가 창 너비에 맞게 최초 1회 자동 맞춤
-        if (!didFitRef.current) {
-          didFitRef.current = true
-          requestAnimationFrame(() => setTimeout(() => fitToWidth(true), 0))
-        }
+        const wrapper = el.querySelector(`.docx${docId}-wrapper`)
+        wrapper?.classList.add('docx-wrapper')
+        await annotateDocx(wrapper, doc, 'docx' + docId)
+        if (cancelled) return
+        // 화면에 보이게(visibility:hidden) 배치한 뒤 페이지를 나누고 표시한다(아래 effect)
+        paginatedRef.current = false
+        setStatus('layout')
       })
       .catch((err) => {
         if (cancelled) return
@@ -75,6 +77,95 @@ export default function DocxView({
       cancelled = true
     }
   }, [buffer])
+
+  // ---- 자동 페이지 나눔 ----
+  // 측정은 100% 배율·화면에 보이는 상태에서만 가능 → 숨겨진 탭/편집 모드면 보일 때까지 미룬다.
+  // 글꼴·그림이 늦게 로드되면 다시 나눈다(dirty → 보일 때 재실행).
+  const paginatedRef = useRef(false)
+  const dirtyRef = useRef(false)
+  const runPaginate = useCallback(() => {
+    const el = containerRef.current
+    const wrapper = el?.querySelector('.docx-wrapper')
+    if (!wrapper || !el.getClientRects().length) return false
+    const prevZoom = el.style.zoom
+    el.style.zoom = '1' // 배율과 무관하게 실제(100%) 크기로 측정
+    try {
+      paginate(wrapper)
+    } catch (err) {
+      console.error('paginate', err)
+    } finally {
+      el.style.zoom = prevZoom
+    }
+    dirtyRef.current = false
+    return true
+  }, [])
+
+  // 최초: 글꼴·그림 로드를 기다린 뒤 나누고 표시
+  useEffect(() => {
+    if (status !== 'layout' || editMode) return
+    const el = containerRef.current
+    if (!el) return
+    let stop = false
+    let busy = false
+    let ro = null
+    const go = async () => {
+      if (stop || busy || !el.getClientRects().length) return // 숨김 → ResizeObserver 가 다시 부름
+      busy = true
+      ro?.disconnect()
+      ro = null
+      const imgs = [...el.querySelectorAll('img')].filter((i) => !i.complete)
+      const wait = Promise.all([
+        document.fonts?.ready,
+        ...imgs.map((i) => i.decode?.().catch(() => {})),
+      ])
+      await Promise.race([wait, new Promise((r) => setTimeout(r, 3000))])
+      busy = false
+      if (stop) return
+      if (!runPaginate()) {
+        ro = new ResizeObserver(go)
+        ro.observe(el)
+        return
+      }
+      paginatedRef.current = true
+      setStatus('done')
+    }
+    ro = new ResizeObserver(go)
+    ro.observe(el)
+    go()
+    return () => {
+      stop = true
+      ro?.disconnect()
+    }
+  }, [status, editMode, runPaginate])
+
+  // 이후: 글꼴/그림이 늦게 로드되면 다시 나눔 (숨김 상태면 보일 때)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let t = null
+    const schedule = () => {
+      if (!paginatedRef.current) return
+      dirtyRef.current = true
+      clearTimeout(t)
+      t = setTimeout(() => dirtyRef.current && runPaginate(), 150)
+    }
+    // 나눔 때 복제한 머리말/꼬리말·반복 머리글 행의 그림은 제외(다시 나누면 또 복제 → 무한 반복)
+    const CLONED = '[data-dv-page="cont"] > header, [data-dv-page="cont"] > footer, [data-dv-rephead]'
+    const onLoad = (e) =>
+      e.target?.tagName === 'IMG' && !e.target.closest(CLONED) && schedule()
+    el.addEventListener('load', onLoad, true) // load 는 버블링 안 됨 → 캡처
+    document.fonts?.addEventListener?.('loadingdone', schedule)
+    const ro = new ResizeObserver(() => {
+      if (dirtyRef.current && el.getClientRects().length) runPaginate()
+    })
+    ro.observe(el)
+    return () => {
+      clearTimeout(t)
+      el.removeEventListener('load', onLoad, true)
+      document.fonts?.removeEventListener?.('loadingdone', schedule)
+      ro.disconnect()
+    }
+  }, [runPaginate])
 
   // ---- 복사 시 문단마다 빈 줄 끼는 문제 보정 (보기 영역) ----
   useEffect(() => {
@@ -333,7 +424,7 @@ export default function DocxView({
           <>
             <button
               className="tool-btn"
-              onClick={() => fitToWidth(false)}
+              onClick={fitToWidth}
               title="A4 한 페이지를 창 너비에 맞춤"
             >
               ⤢ 페이지 맞춤
@@ -350,7 +441,7 @@ export default function DocxView({
 
       <div className="docx-scroll" ref={scrollRef}>
         {/* 보기 영역 */}
-        {!editMode && status === 'loading' && (
+        {!editMode && (status === 'loading' || status === 'layout') && (
           <div className="state-note loading">문서를 렌더링하는 중…</div>
         )}
         {!editMode && status === 'error' && (
@@ -360,7 +451,9 @@ export default function DocxView({
           ref={containerRef}
           className="docx-host"
           style={{
-            display: !editMode && status === 'done' ? 'block' : 'none',
+            display: !editMode && (status === 'done' || status === 'layout') ? 'block' : 'none',
+            // 페이지 나누는 동안은 배치만 하고 감춘다(긴 한 장이 번쩍이지 않게)
+            visibility: status === 'layout' ? 'hidden' : undefined,
             zoom,
           }}
         />

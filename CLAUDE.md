@@ -20,11 +20,12 @@ src/
                        단축키는 window 캡처 단계(Ctrl+O/S/F/P, 확대). Ctrl+S → 'dv-save' 이벤트
   views/
     DocxView.jsx       보기=docx-preview, 편집=mammoth(지연)+execCommand, 저장=html-to-docx
-                       A4 페이지 자동맞춤(onAutoFit)
+                       열 때 기본 90%(App DEFAULT_ZOOM), '페이지 맞춤' 버튼=onAutoFit
     XlsxView.jsx       ExcelJS 로 렌더/편집(색·서식 보존). .xls/.csv 는 SheetJS(지연)
                        로 xlsx 변환 후 처리. 범위선택/행열삽입삭제/셀서식
     TextView.jsx       txt/log/ini/bat 텍스트 + md 마크다운(marked, 지연). 편집·저장
   lib/save.js          저장(Electron 대화상자 / 브라우저 다운로드), exportDocxSave
+  lib/paginate.js      docx 자동 페이지 나눔(렌더 후 블록 높이 측정 → section 복제)
 electron/
   main.cjs             메인 프로세스(소스). 파일연결 열기 + 저장/바로가기/기본앱 IPC
   main.build.cjs        ← esbuild 번들 산출(gitignore). package.json "main"
@@ -127,8 +128,14 @@ npm run dist:win       # 윈도우 설치 파일(release-exe/) — 윈도우에�
   **EUC-KR 폴백**(한글 엑셀 CSV 대응). 편집 저장은 `.xlsx` 로(서식 보존).
 - **docx** — 보기=docx-preview(충실). 편집=mammoth 로 단순 HTML 화 후 contentEditable
   (+execCommand 서식). 저장=html-to-docx(네이티브). **워드 저장은 앱(.exe) 전용**
-  (브라우저는 편집만). A4 페이지는 열 때 창 너비에 자동 맞춤(최대 150%).
+  (브라우저는 편집만). 열 때 기본 확대 90%('페이지 맞춤'은 수동 버튼).
   docx-preview className 은 문서마다 `docx<id>`(여러 docx 스타일 충돌 방지).
+  **자동 페이지 나눔**(`lib/paginate.js`): docx-preview 는 명시적 나누기에서만 페이지를
+  나눠 스크립트로 만든 문서는 한 장으로 나온다 → 렌더 후 100% 배율로 블록 높이를 재서
+  section(용지 크기·여백·머리말/꼬리말)을 복제해 나눈다. 표는 행 단위 + 머리글 행
+  (`w:tblHeader`, docx-preview 가 값 없는 태그를 못 읽어 document.xml 직접 파싱) 반복,
+  제목(keepNext)은 다음 블록과 함께. `ignoreLastRenderedPageBreak: true` 유지(워드 저장
+  위치까지 쓰면 글꼴 차이로 이중 나눔). 글꼴·그림 늦게 로드되면 되돌린 뒤 다시 나눔.
 - **txt/log/ini/bat** — 모노스페이스 텍스트 뷰(+줄바꿈 토글), 편집·저장. UTF-8(BOM)/
   UTF-16(BOM)/EUC-KR 자동 감지, 저장 시 **원래 인코딩·CRLF 유지**(.bat 이 cmd 에서 깨지지 않게).
 - **md** — marked(지연)로 마크다운 렌더. 원문 편집 가능. DOMParser 로 sanitize
