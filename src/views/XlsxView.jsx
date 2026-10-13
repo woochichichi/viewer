@@ -178,6 +178,58 @@ function applyEdit(ws, r, c, text) {
 
 const toArgb = (hex) => 'FF' + hex.replace('#', '').slice(-6).toUpperCase()
 
+// 대기 중 편집 키 (시트 이름에 공백이 있어도 안전하도록 객체 값에 좌표를 따로 보관)
+const cellKey = (sheet, r, c) => `${sheet}\u0001${r}\u0001${c}`
+
+// 대기 중인 서식 편집 → 화면 CSS (재렌더/시트 전환 후에도 편집 내용이 보이도록)
+function pendingCss(st) {
+  if (!st) return null
+  const css = {}
+  if (st.bold !== undefined) css.fontWeight = st.bold ? 'bold' : 'normal'
+  if (st.color) css.color = st.color
+  if (st.fill) css.backgroundColor = st.fill
+  if (st.align) css.textAlign = st.align
+  if (st.size) css.fontSize = Math.round(st.size * 1.33) + 'px'
+  if (st.strike !== undefined) css.textDecoration = st.strike ? 'line-through' : 'none'
+  return css
+}
+
+// 행/열 삽입·삭제 시 병합 범위 이동.
+// ExcelJS 의 spliceRows/spliceColumns 는 병합 정보를 옮기지 않아(그대로 남거나 저장 시 사라짐)
+// 병합을 모두 풀고 → 구조 변경 → 좌표를 보정해 다시 병합한다.
+function spliceWithMerges(ws, op, at) {
+  const ranges = (ws.model.merges || []).map((m) => {
+    const [a, b] = m.split(':')
+    const s = decodeAddr(a)
+    const e = decodeAddr(b)
+    return { r1: s.r, c1: s.c, r2: e.r, c2: e.c, ref: m }
+  })
+  for (const m of ranges) ws.unMergeCells(m.ref)
+  const isRow = op === 'insRow' || op === 'delRow'
+  const ins = op === 'insRow' || op === 'insCol'
+  if (op === 'insRow') ws.spliceRows(at, 0, [])
+  else if (op === 'delRow') ws.spliceRows(at, 1)
+  else if (op === 'insCol') ws.spliceColumns(at, 0, [])
+  else if (op === 'delCol') ws.spliceColumns(at, 1)
+  const [k1, k2] = isRow ? ['r1', 'r2'] : ['c1', 'c2']
+  for (const m of ranges) {
+    if (ins) {
+      if (m[k1] >= at) m[k1]++
+      if (m[k2] >= at) m[k2]++
+    } else {
+      if (m[k2] < at) {
+        // 영향 없음
+      } else if (m[k1] > at) {
+        m[k1]--
+        m[k2]--
+      } else m[k2]-- // 지운 줄이 병합 범위 안 → 범위 축소
+    }
+    if (m.r2 < m.r1 || m.c2 < m.c1) continue
+    if (m.r1 === m.r2 && m.c1 === m.c2) continue // 한 칸만 남으면 병합 해제
+    ws.mergeCells(m.r1, m.c1, m.r2, m.c2)
+  }
+}
+
 const FONT_SIZES = [10, 11, 12, 14, 16, 18, 24, 32]
 
 export default function XlsxView({
@@ -193,8 +245,13 @@ export default function XlsxView({
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const editsRef = useRef(new Map()) // "sheet r c" -> 문자열
-  const styleEditsRef = useRef(new Map()) // "sheet r c" -> {bold,color,fill,align,size,strike}
+  const editsRef = useRef(new Map()) // cellKey -> { sheet, r, c, text }
+  const styleEditsRef = useRef(new Map()) // cellKey -> { sheet, r, c, st:{bold,color,fill,align,size,strike} }
+  // 표 DOM 을 새로 만들기 위한 버전(시트 전환·행열 변경 시 이전 셀의 편집 흔적이 남지 않게)
+  const [ver, setVer] = useState(0)
+  // 표를 새로 그릴 때 보여줄 대기 편집 스냅숏. 입력 중 재렌더에서 React 가 셀 글자를
+  // 덮어써 커서가 튀지 않도록, 표를 새로 만들 때(시트 전환)만 갱신한다.
+  const snapRef = useRef({ edits: new Map(), styles: new Map() })
   const selRef = useRef(null) // { sheet, r, c, el }
   const rangeRef = useRef(null) // { sheet, r1, c1, r2, c2 }
   const gridRef = useRef(null)
@@ -204,6 +261,7 @@ export default function XlsxView({
     setModel(null)
     editsRef.current = new Map()
     styleEditsRef.current = new Map()
+    snapRef.current = { edits: new Map(), styles: new Map() }
     selRef.current = null
     rangeRef.current = null
     setDirty(false)
@@ -234,8 +292,46 @@ export default function XlsxView({
         tdAt(r, c)?.classList.add('cell-sel')
   }
 
+  // 셀 키보드: Enter 는 줄바꿈 대신 아래 칸으로(엑셀처럼). 셀 안 줄바꿈은 저장 시 사라져
+  // 화면과 저장 결과가 달라지므로 막는다. Tab=오른쪽, Shift 와 함께 반대 방향.
+  const onCellKeyDown = useCallback((e, r, c) => {
+    if (e.key !== 'Enter' && e.key !== 'Tab') return
+    if (e.nativeEvent.isComposing) return // 한글 조합 중 Enter 는 조합 확정용
+    e.preventDefault()
+    const back = e.shiftKey
+    const [dr, dc] = e.key === 'Enter' ? [back ? -1 : 1, 0] : [0, back ? -1 : 1]
+    for (let i = 1; i < 500; i++) {
+      const nr = r + dr * i
+      const nc = c + dc * i
+      if (nr < 1 || nc < 1) break
+      const el = gridRef.current?.querySelector(`td[data-r="${nr}"][data-c="${nc}"]`)
+      if (el) {
+        el.focus()
+        // 커서를 셀 끝으로
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(false)
+        const sel = window.getSelection()
+        sel.removeAllRanges()
+        sel.addRange(range)
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        rangeRef.current = null
+        clearRangeHighlight()
+        return
+      }
+      if (!gridRef.current?.querySelector(`tr td[data-r="${nr}"]`) && dr) break
+    }
+  }, [])
+
+  // 붙여넣기는 글자만 (엑셀/웹에서 복사한 표·서식 HTML 이 셀 안에 통째로 들어가는 것 방지)
+  const onCellPaste = useCallback((e) => {
+    e.preventDefault()
+    const t = (e.clipboardData?.getData('text/plain') || '').replace(/\r?\n$/, '')
+    document.execCommand('insertText', false, t.replace(/[\t\r\n]+/g, ' '))
+  }, [])
+
   const onCellEdit = useCallback((sheetName, r, c, text) => {
-    editsRef.current.set(`${sheetName} ${r} ${c}`, text)
+    editsRef.current.set(cellKey(sheetName, r, c), { sheet: sheetName, r, c, text })
     setDirty(true)
   }, [])
 
@@ -263,8 +359,9 @@ export default function XlsxView({
     if (delta.strike === 'toggle')
       d = { strike: !(first?.style.textDecoration || '').includes('line-through') }
     for (const t of list) {
-      const key = `${t.sheet} ${t.r} ${t.c}`
-      styleEditsRef.current.set(key, { ...(styleEditsRef.current.get(key) || {}), ...d })
+      const key = cellKey(t.sheet, t.r, t.c)
+      const prev = styleEditsRef.current.get(key)
+      styleEditsRef.current.set(key, { ...t, st: { ...(prev?.st || {}), ...d } })
       const el = tdAt(t.r, t.c)
       if (!el) continue
       const s = el.style
@@ -279,27 +376,29 @@ export default function XlsxView({
   }, [])
 
   const flushToWb = (wb) => {
-    for (const [key, text] of editsRef.current) {
-      const [sheetName, rs, cs] = key.split(' ')
-      const ws = wb.getWorksheet(sheetName)
-      if (ws) applyEdit(ws, Number(rs), Number(cs), text)
+    for (const { sheet, r, c, text } of editsRef.current.values()) {
+      const ws = wb.getWorksheet(sheet)
+      if (ws) applyEdit(ws, r, c, text)
     }
-    for (const [key, st] of styleEditsRef.current) {
-      const [sheetName, rs, cs] = key.split(' ')
-      const ws = wb.getWorksheet(sheetName)
+    for (const { sheet, r, c, st } of styleEditsRef.current.values()) {
+      const ws = wb.getWorksheet(sheet)
       if (!ws) continue
-      const cell = ws.getCell(Number(rs), Number(cs))
+      const cell = ws.getCell(r, c)
+      // 불러온 셀들은 같은 서식 객체를 공유한다 → cell.font = … 처럼 바로 바꾸면 같은 서식의
+      // 다른 셀(시트 전체일 수도)까지 바뀐다. 이 셀 전용 style 사본을 만든 뒤 수정한다.
+      const style = { ...(cell.style || {}) }
       if (st.bold !== undefined || st.color || st.size || st.strike !== undefined) {
-        const font = { ...(cell.font || {}) }
+        const font = { ...(style.font || {}) }
         if (st.bold !== undefined) font.bold = st.bold
         if (st.strike !== undefined) font.strike = st.strike
         if (st.color) font.color = { argb: toArgb(st.color) }
         if (st.size) font.size = st.size
-        cell.font = font
+        style.font = font
       }
       if (st.fill)
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(st.fill) } }
-      if (st.align) cell.alignment = { ...(cell.alignment || {}), horizontal: st.align }
+        style.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(st.fill) } }
+      if (st.align) style.alignment = { ...(style.alignment || {}), horizontal: st.align }
+      cell.style = style
     }
   }
 
@@ -309,6 +408,8 @@ export default function XlsxView({
     try {
       const wb = model.data.wb
       flushToWb(wb)
+      // 값을 고쳤으면 수식 결과(캐시값)가 낡았으므로 엑셀이 열 때 다시 계산하도록
+      wb.calcProperties = { ...(wb.calcProperties || {}), fullCalcOnLoad: true }
       const out = await wb.xlsx.writeBuffer()
       // xls/csv 로 연 파일도 편집 저장은 xlsx 로 (서식 보존)
       const outName = /\.(xls|csv)$/i.test(name)
@@ -319,8 +420,8 @@ export default function XlsxView({
         setDirty(false)
         setSaved(true)
         setTimeout(() => setSaved(false), 1800)
-        editsRef.current.clear()
-        styleEditsRef.current.clear()
+        // 편집 목록은 지우지 않는다: 화면 모델은 원본 기준이라 시트 전환 시 편집값을 다시
+        // 보여줘야 하고, 다음 저장 때 같은 값을 다시 반영해도 결과는 같다.
       } else if (res.error) alert('저장 실패: ' + res.error)
     } catch (err) {
       alert('저장 실패: ' + (err?.message || err))
@@ -341,15 +442,15 @@ export default function XlsxView({
       flushToWb(wb)
       const ws = wb.getWorksheet(sel.sheet)
       if (!ws) return
-      if (op === 'insRow') ws.spliceRows(sel.r + 1, 0, [])
-      else if (op === 'delRow') ws.spliceRows(sel.r, 1)
-      else if (op === 'insCol') ws.spliceColumns(sel.c + 1, 0, [])
-      else if (op === 'delCol') ws.spliceColumns(sel.c, 1)
+      const at = op === 'insRow' ? sel.r + 1 : op === 'insCol' ? sel.c + 1 : op === 'delRow' ? sel.r : sel.c
+      spliceWithMerges(ws, op, at)
       editsRef.current.clear()
       styleEditsRef.current.clear()
+      snapRef.current = { edits: new Map(), styles: new Map() }
       selRef.current = null
       rangeRef.current = null
       setModel({ data: { wb, sheets: sheetsFromWorkbook(wb) } })
+      setVer((v) => v + 1)
       setDirty(true)
     },
     [model]
@@ -362,6 +463,8 @@ export default function XlsxView({
     )
 
   const { sheets } = model.data
+  if (!sheets.length)
+    return <div className="state-note error">표시할 워크시트가 없습니다 (차트 시트만 있는 파일).</div>
   const sheet = sheets[Math.min(activeSheet, sheets.length - 1)]
 
   return (
@@ -480,7 +583,7 @@ export default function XlsxView({
       </div>
 
       <div className="xlsx-grid-scroll" ref={gridRef}>
-        <table className="xlsx-table" style={{ zoom }}>
+        <table key={`${ver}:${sheet.name}`} className="xlsx-table" style={{ zoom }}>
           <colgroup>
             <col className="head-col" style={{ width: 44 }} />
             {sheet.colWidths.map((w, i) => (
@@ -510,14 +613,18 @@ export default function XlsxView({
                 }
               >
                 <th className="row-head">{ri + 1}</th>
-                {row.cells.map((cell, ci) =>
-                  cell === null ? null : (
+                {row.cells.map((cell, ci) => {
+                  if (cell === null) return null
+                  const k = cellKey(sheet.name, ri + 1, ci + 1)
+                  const pend = snapRef.current.edits.get(k)
+                  const pst = pendingCss(snapRef.current.styles.get(k)?.st)
+                  return (
                     <td
                       key={ci}
                       data-r={ri + 1}
                       data-c={ci + 1}
                       className={editMode ? 'editable' : undefined}
-                      style={cell.style}
+                      style={pst ? { ...cell.style, ...pst } : cell.style}
                       rowSpan={cell.rowSpan > 1 ? cell.rowSpan : undefined}
                       colSpan={cell.colSpan > 1 ? cell.colSpan : undefined}
                       contentEditable={editMode}
@@ -554,6 +661,8 @@ export default function XlsxView({
                             }
                           : undefined
                       }
+                      onKeyDown={editMode ? (e) => onCellKeyDown(e, ri + 1, ci + 1) : undefined}
+                      onPaste={editMode ? onCellPaste : undefined}
                       onInput={
                         editMode
                           ? (e) =>
@@ -561,10 +670,10 @@ export default function XlsxView({
                           : undefined
                       }
                     >
-                      {cell.text}
+                      {pend ? pend.text : cell.text}
                     </td>
                   )
-                )}
+                })}
               </tr>
             ))}
           </tbody>
@@ -577,6 +686,11 @@ export default function XlsxView({
             key={i}
             className={'sheet-tab' + (i === activeSheet ? ' active' : '')}
             onClick={() => {
+              if (i === activeSheet) return
+              snapRef.current = {
+                edits: new Map(editsRef.current),
+                styles: new Map(styleEditsRef.current),
+              }
               setActiveSheet(i)
               selRef.current = null
               rangeRef.current = null

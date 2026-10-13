@@ -11,14 +11,33 @@ let pendingPaths = [] // 렌더러 준비 전에 들어온 파일 경로 대기�
 
 // argv 에서 실제로 존재하는 .docx/.xlsx 경로만 골라낸다.
 // (exe 경로, 앱 디렉터리('.'), --flag 등은 확장자/존재검사로 자연히 걸러짐)
-function pickDocPaths(argv) {
-  return (argv || []).filter(
-    (a) =>
-      typeof a === 'string' &&
-      /\.(docx|xlsx|xls|csv|txt|log|md|ini|bat)$/i.test(a) &&
-      fs.existsSync(a) &&
-      fs.statSync(a).isFile()
-  )
+// cwd: 상대 경로 기준 폴더(두 번째 인스턴스는 자기 작업 폴더를 넘겨준다)
+function pickDocPaths(argv, cwd) {
+  const out = []
+  for (const a of argv || []) {
+    if (typeof a !== 'string' || a.startsWith('-')) continue
+    if (!/\.(docx|xlsx|xls|csv|txt|log|md|ini|bat)$/i.test(a)) continue
+    try {
+      const p = cwd ? path.resolve(cwd, a) : path.resolve(a)
+      if (fs.statSync(p).isFile()) out.push(p)
+    } catch {
+      // 없는 파일·접근 불가 → 무시
+    }
+  }
+  return out
+}
+
+// 렌더러가 넘긴 저장 파일명 검증: 문자열·파일명만(경로 제거)·길이 제한
+function safeName(name, fallback) {
+  const n = typeof name === 'string' ? path.basename(name).trim() : ''
+  return n && n.length <= 255 ? n : fallback
+}
+
+// 렌더러가 넘긴 바이트 검증 (Uint8Array / ArrayBuffer 만 허용)
+function toBuffer(data) {
+  if (data instanceof Uint8Array) return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+  if (data instanceof ArrayBuffer) return Buffer.from(data)
+  throw new Error('잘못된 데이터 형식입니다.')
 }
 
 function enqueue(paths) {
@@ -106,6 +125,16 @@ function createWindow() {
     if (st.maximized) mainWindow.maximize()
     mainWindow.show()
   })
+  // 문서 속 링크 클릭 등으로 앱 창이 다른 주소로 넘어가지 않게 막는다.
+  // (넘어가면 열어둔 파일이 모두 사라지고 되돌아올 방법이 없음)
+  // 새 창 요청은 http/https/mailto 만 기본 브라우저로 넘기고 앱 안에서는 열지 않는다.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url).catch(() => {})
+    return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (url !== mainWindow.webContents.getURL()) e.preventDefault()
+  })
   mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
   mainWindow.on('close', () => saveWindowState(mainWindow))
   mainWindow.on('closed', () => {
@@ -120,8 +149,8 @@ const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', (_event, argv) => {
-    enqueue(pickDocPaths(argv))
+  app.on('second-instance', (_event, argv, workingDirectory) => {
+    enqueue(pickDocPaths(argv, workingDirectory))
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
@@ -132,6 +161,8 @@ if (!gotLock) {
   app.on('open-file', (event, p) => {
     event.preventDefault()
     enqueue(pickDocPaths([p]))
+    // 창을 모두 닫은 상태(macOS)에서 파일을 열면 창을 다시 띄운다
+    if (app.isReady() && !mainWindow) createWindow()
   })
 
   app.whenReady().then(() => {
@@ -154,17 +185,19 @@ if (!gotLock) {
   })
 
   // 편집 결과 저장: 저장 위치를 물어보고 파일로 기록한다.
-  ipcMain.handle('save-file', async (_e, { defaultName, data }) => {
+  ipcMain.handle('save-file', async (_e, arg) => {
     try {
-      const ext = path.extname(defaultName || '').replace('.', '') || 'xlsx'
+      const { defaultName, data } = arg || {}
+      const bytes = toBuffer(data)
+      const name = safeName(defaultName, '문서-편집.xlsx')
+      const ext = path.extname(name).replace('.', '') || 'xlsx'
       const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
         title: '저장',
-        defaultPath: defaultName,
+        defaultPath: name,
         filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
       })
       if (canceled || !filePath) return { saved: false }
-      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
-      fs.writeFileSync(filePath, Buffer.from(bytes))
+      fs.writeFileSync(filePath, bytes)
       return { saved: true, path: filePath }
     } catch (err) {
       return { saved: false, error: String(err && err.message ? err.message : err) }
@@ -200,8 +233,11 @@ if (!gotLock) {
   })
 
   // 편집한 HTML → native docx 로 변환해 저장 (Node 환경에서 html-to-docx 실행)
-  ipcMain.handle('export-docx', async (_e, { html, defaultName }) => {
+  ipcMain.handle('export-docx', async (_e, arg) => {
     try {
+      const { html } = arg || {}
+      if (typeof html !== 'string') throw new Error('잘못된 문서 내용입니다.')
+      const defaultName = safeName(arg.defaultName, '문서-편집.docx')
       const HTMLtoDOCX = require('html-to-docx')
       const buf = await HTMLtoDOCX(html, null, {
         table: { row: { cantSplit: true } },

@@ -4,11 +4,17 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
-  // 메인이 보내는 파일 열기 이벤트 구독
-  onOpenFile: (cb) =>
-    ipcRenderer.on('open-file', (_e, payload) => cb(payload)),
-  onOpenFileError: (cb) =>
-    ipcRenderer.on('open-file-error', (_e, payload) => cb(payload)),
+  // 메인이 보내는 파일 열기 이벤트 구독 (반환값 = 구독 해제 함수)
+  onOpenFile: (cb) => {
+    const h = (_e, payload) => cb(payload)
+    ipcRenderer.on('open-file', h)
+    return () => ipcRenderer.removeListener('open-file', h)
+  },
+  onOpenFileError: (cb) => {
+    const h = (_e, payload) => cb(payload)
+    ipcRenderer.on('open-file-error', h)
+    return () => ipcRenderer.removeListener('open-file-error', h)
+  },
   // 렌더러 준비 완료 알림 → 메인이 대기 중인 파일 전송
   notifyReady: () => ipcRenderer.send('renderer-ready'),
   // 편집 결과 저장: 저장 대화상자를 띄우고 파일로 기록

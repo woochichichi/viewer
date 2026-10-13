@@ -305,6 +305,14 @@ body {
   background: var(--bg);
 }
 
+/* 탭별 문서 영역 (비활성 탭은 숨김만 — 편집 상태 유지) */
+.view-pane {
+  height: 100%;
+}
+.view-pane:not(.active) {
+  display: none !important;
+}
+
 /* ---------- Dropzone ---------- */
 .dropzone {
   height: 100%;
@@ -412,7 +420,7 @@ body {
   background: transparent;
   padding: 0;
 }
-.docx-host .docx-wrapper > section.docx {
+.docx-host .docx-wrapper > section {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
   margin-bottom: 20px;
   background: #fff;
@@ -880,6 +888,7 @@ body {
   .app,
   .viewer,
   .render-area,
+  .view-pane.active,
   .docx-outer,
   .xlsx-wrap,
   .text-wrap,
@@ -907,13 +916,13 @@ body {
     background: none !important;
     padding: 0 !important;
   }
-  .docx-host .docx-wrapper > section.docx {
+  .docx-host .docx-wrapper > section {
     page: docx;
     box-shadow: none !important;
     margin: 0 !important;
     break-after: page;
   }
-  .docx-host .docx-wrapper > section.docx:last-child {
+  .docx-host .docx-wrapper > section:last-child {
     break-after: auto;
   }
   /* docx 편집: 편집 영역 내용만 */
@@ -964,4 +973,10 @@ body {
     white-space: pre-wrap;
     word-break: break-word;
   }
+}
+
+/* 찾기 결과 없음 */
+.find-input.miss {
+  background: #fdecea;
+  color: #b42318;
 }

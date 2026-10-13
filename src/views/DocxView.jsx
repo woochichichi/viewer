@@ -6,6 +6,7 @@ import { exportDocxSave, editedName } from '../lib/save.js'
 export default function DocxView({
   buffer,
   name = 'document.docx',
+  docId = 0,
   zoom = 1,
   onAutoFit,
   onPrint,
@@ -27,7 +28,7 @@ export default function DocxView({
     const host = containerRef.current
     const scroll = scrollRef.current
     if (!host || !scroll) return
-    const page = host.querySelector('section.docx')
+    const page = host.querySelector('.docx-wrapper > section')
     if (!page || !page.offsetWidth) return
     const avail = scroll.clientWidth - 48 // 좌우 패딩
     onAutoFit?.(avail / page.offsetWidth)
@@ -42,7 +43,9 @@ export default function DocxView({
     setStatus('loading')
     setError('')
     renderAsync(buffer, el, undefined, {
-      className: 'docx',
+      // 문서마다 고유 접두사: 여러 docx 를 탭으로 열어 두면 docx-preview 가 넣는 <style> 이
+      // 전역으로 겹쳐 서로의 스타일(Normal·제목 등)을 덮어쓰므로 클래스 이름을 분리한다.
+      className: 'docx' + docId,
       inWrapper: true,
       breakPages: true,
       experimental: true,
@@ -50,6 +53,8 @@ export default function DocxView({
     })
       .then(() => {
         if (cancelled) return
+        // 공통 CSS(그림자·인쇄 페이지 나눔)가 적용되도록 래퍼에 공통 클래스 부여
+        el.querySelector(`.docx${docId}-wrapper`)?.classList.add('docx-wrapper')
         setStatus('done')
         // A4 페이지가 창 너비에 맞게 최초 1회 자동 맞춤
         if (!didFitRef.current) {
